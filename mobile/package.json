@@ -1,0 +1,31 @@
+{
+  "name": "khan-native-interfaces",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "web": "vite --host 0.0.0.0",
+    "native": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "build": "vite build",
+    "export:native": "expo export --platform android --output-dir dist-native"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~4.0.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "expo": "~52.0.0",
+    "lucide-react": "^0.468.0",
+    "lucide-react-native": "^0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-svg": "15.8.0",
+    "react-native-web": "~0.19.13",
+    "vite": "^5.4.11"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2"
+  }
+}

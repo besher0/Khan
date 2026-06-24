@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-native/
+
+# Expo local state
+.expo/
+.expo-start.log
+
+# Tooling logs
+npm-debug.log*
+
+# Local Codex preview files
+.codex-preview/

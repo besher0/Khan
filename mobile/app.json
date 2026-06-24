@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Khan",
+    "slug": "khan",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "assets/**/*"
+    ],
+    "android": {
+      "package": "com.khan.app"
+    },
+    "ios": {
+      "bundleIdentifier": "com.khan.app"
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
