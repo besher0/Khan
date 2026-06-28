@@ -1,4 +1,4 @@
-import { PaymentStatus } from '@prisma/client';
+import { PaymentStatus, Prisma } from '@prisma/client';
 import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class InitiateShamCashDto {
@@ -19,5 +19,5 @@ export class ShamCashCallbackDto {
 
   @IsOptional()
   @IsObject()
-  payload?: Record<string, unknown>;
+  payload?: Prisma.InputJsonObject;
 }

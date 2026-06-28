@@ -28,7 +28,7 @@ export class RegisterDto {
 
   @IsOptional()
   @IsEnum(UserRole)
-  role?: UserRole.CUSTOMER | UserRole.MERCHANT;
+  role?: typeof UserRole.CUSTOMER | typeof UserRole.MERCHANT;
 }
 
 export class LoginDto {

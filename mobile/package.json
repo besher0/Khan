@@ -13,19 +13,24 @@
     "export:native": "expo export --platform android --output-dir dist-native"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~4.0.1",
+    "@expo/metro-runtime": "~6.1.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "expo": "~52.0.0",
+    "expo": "~54.0.35",
     "lucide-react": "^0.468.0",
     "lucide-react-native": "^0.468.0",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-native": "0.76.9",
-    "react-native-svg": "15.8.0",
-    "react-native-web": "~0.19.13",
+    "nativewind": "^4.1.23",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-native": "^0.81.5",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-svg": "^15.12.1",
+    "react-native-web": "^0.21.0",
+    "react-native-worklets": "^0.5.1",
+    "tailwindcss": "^3.4.17",
     "vite": "^5.4.11"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2"
+    "@babel/core": "^7.25.2",
+    "autoprefixer": "^10.4.27"
   }
 }

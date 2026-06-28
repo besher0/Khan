@@ -12,5 +12,9 @@ dist-native/
 # Tooling logs
 npm-debug.log*
 
+# Local environment secrets
+.env
+.env.local
+
 # Local Codex preview files
 .codex-preview/
