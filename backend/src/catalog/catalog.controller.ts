@@ -45,4 +45,9 @@ export class CatalogController {
   reels(@Query() query: ProductQueryDto) {
     return this.catalog.reels(query);
   }
+
+  @Get('coupons')
+  coupons(@Query() query: ProductQueryDto) {
+    return this.catalog.coupons(query);
+  }
 }

@@ -174,6 +174,27 @@ export class CatalogService {
     return { items, total, skip: query.skip, take: query.take };
   }
 
+  async coupons(query: ProductQueryDto) {
+    const where = {
+      status: CouponStatus.ACTIVE,
+      store: { status: StoreStatus.APPROVED },
+      ...(query.storeId ? { storeId: query.storeId } : {}),
+      ...(query.q ? { code: { contains: query.q, mode: 'insensitive' as const } } : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.coupon.findMany({
+        where,
+        include: { store: true },
+        skip: query.skip,
+        take: query.take,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.coupon.count({ where }),
+    ]);
+
+    return { items, total, skip: query.skip, take: query.take };
+  }
+
   private productInclude() {
     return {
       store: true,

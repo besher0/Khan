@@ -5,10 +5,7 @@ const fallbackBaseUrl = Platform.select({
   default: 'http://localhost:4000/api/v1',
 });
 
-const runtimeEnv =
-  (typeof process !== 'undefined' ? process.env : undefined) ||
-  (typeof import.meta !== 'undefined' ? import.meta.env : undefined) ||
-  {};
+const runtimeEnv = typeof process !== 'undefined' && process.env ? process.env : {};
 
 export const API_BASE_URL = runtimeEnv.EXPO_PUBLIC_API_URL || runtimeEnv.VITE_API_URL || fallbackBaseUrl;
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
@@ -148,6 +145,7 @@ export const catalogApi = {
   storeProducts: (id, query = {}) => apiFetch(`/stores/${id}/products${makeQuery(query)}`),
   search: (query = {}) => apiFetch(`/search${makeQuery(query)}`),
   reels: (query = {}) => apiFetch(`/reels${makeQuery(query)}`),
+  coupons: (query = {}) => apiFetch(`/coupons${makeQuery(query)}`),
 };
 
 export const cartApi = {

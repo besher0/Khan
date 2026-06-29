@@ -5,15 +5,15 @@ export const styles = StyleSheet.create({
   appRoot: {
     flex: 1,
     backgroundColor: palette.panel,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   workspace: {
     flex: 1,
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingBottom: 18,
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
   workspaceAdmin: {
     justifyContent: 'flex-start',
@@ -23,27 +23,22 @@ export const styles = StyleSheet.create({
   phoneStage: {
     flex: 1,
     width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
   },
   phoneStageSmall: {
     paddingHorizontal: 0,
   },
   phoneFrame: {
+    flex: 1,
     width: '100%',
-    maxWidth: 414,
     height: '100%',
-    maxHeight: 896,
     backgroundColor: palette.white,
     overflow: 'hidden',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
-    shadowColor: '#0D2A22',
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    borderRadius: 0,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   phoneContent: {
     flex: 1,
@@ -56,59 +51,15 @@ export const styles = StyleSheet.create({
   screenScrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 120,
+    width: '100%',
+    maxWidth: 1180,
+    alignSelf: 'center',
   },
   rtlText: {
     writingDirection: 'rtl',
     textAlign: 'right',
     color: palette.ink,
     fontFamily: Platform.select({ android: 'sans-serif', ios: 'Arial', web: 'Arial' }),
-  },
-  statusBar: {
-    height: 48,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: palette.white,
-  },
-  statusTime: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0D2542',
-  },
-  statusIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  signalBars: {
-    height: 16,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  signalBar: {
-    width: 3,
-    borderRadius: 2,
-    backgroundColor: '#0D2542',
-  },
-  wifi: {
-    color: '#0D2542',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  battery: {
-    width: 24,
-    height: 12,
-    borderRadius: 3,
-    borderWidth: 1.6,
-    borderColor: '#0D2542',
-    padding: 2,
-  },
-  batteryFill: {
-    flex: 1,
-    borderRadius: 2,
-    backgroundColor: '#0D2542',
   },
   header: {
     minHeight: 58,
@@ -266,8 +217,17 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.green,
   },
+  rtlHorizontalScroll: {
+    transform: [{ scaleX: -1 }],
+  },
+  rtlHorizontalContent: {
+    flexDirection: 'row',
+  },
+  rtlHorizontalItem: {
+    transform: [{ scaleX: -1 }],
+  },
   horizontalCards: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 2,
     paddingBottom: 4,
@@ -387,6 +347,73 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     rowGap: 14,
   },
+  collectionContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 120,
+    width: '100%',
+    maxWidth: 1180,
+    alignSelf: 'center',
+  },
+  collectionHeader: {
+    minHeight: 64,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  collectionHeaderText: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  collectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  collectionTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  collectionSub: {
+    marginTop: 4,
+    color: palette.muted,
+    fontSize: 12,
+  },
+  collectionGrid: {
+    marginTop: 14,
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14,
+  },
+  collectionCardThreeColumns: {
+    width: '31.5%',
+  },
+  collectionCardFourColumns: {
+    width: '23.5%',
+  },
+  collectionReelTile: {
+    width: '48%',
+    aspectRatio: 0.74,
+  },
+  collectionReelCard: {
+    width: '100%',
+    height: '100%',
+  },
+  collectionCouponTile: {
+    width: '48%',
+  },
+  collectionCouponCard: {
+    width: '100%',
+    height: 112,
+  },
+  collectionEmpty: {
+    marginTop: 34,
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   productCard: {
     width: '48%',
     backgroundColor: palette.white,
@@ -403,8 +430,17 @@ export const styles = StyleSheet.create({
   productCardCompact: {
     width: 158,
   },
+  productCardThreeColumns: {
+    width: '31.5%',
+  },
+  productCardFourColumns: {
+    width: '23.5%',
+  },
+  productCardWideCompact: {
+    width: 184,
+  },
   productImageBox: {
-    height: 132,
+    aspectRatio: 1.08,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#F2F3F2',
@@ -500,6 +536,9 @@ export const styles = StyleSheet.create({
   },
   detailsContent: {
     paddingBottom: 120,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
     backgroundColor: palette.white,
   },
   detailsTopBar: {
@@ -523,8 +562,9 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   detailsImageWrap: {
-    height: 330,
     marginHorizontal: 16,
+    aspectRatio: 1.12,
+    maxHeight: 360,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: '#F0F2F2',
@@ -750,6 +790,9 @@ export const styles = StyleSheet.create({
   cartContent: {
     padding: 16,
     paddingBottom: 120,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
   },
   cartHeader: {
     marginBottom: 14,
@@ -901,6 +944,9 @@ export const styles = StyleSheet.create({
   checkoutContent: {
     paddingHorizontal: 16,
     paddingBottom: 120,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
   },
   detailsTopSpacer: {
     width: 36,
@@ -1029,10 +1075,12 @@ export const styles = StyleSheet.create({
   offerBand: {
     marginTop: 18,
     flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
     gap: 10,
   },
   offerCard: {
     flex: 1,
+    minWidth: 240,
     height: 94,
     borderRadius: 8,
     borderWidth: 1,
@@ -1082,7 +1130,7 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
   },
   tabs: {
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 12,
     paddingTop: 14,
     paddingBottom: 8,
@@ -1114,6 +1162,9 @@ export const styles = StyleSheet.create({
   storeInner: {
     paddingHorizontal: 16,
     paddingBottom: 120,
+    width: '100%',
+    maxWidth: 1180,
+    alignSelf: 'center',
   },
   storeTopActions: {
     marginTop: 8,
@@ -1137,7 +1188,9 @@ export const styles = StyleSheet.create({
   },
   storeHero: {
     width: '100%',
-    height: 108,
+    minHeight: 108,
+    maxHeight: 260,
+    aspectRatio: 3.4,
     borderRadius: 8,
     resizeMode: 'cover',
   },
@@ -1236,9 +1289,15 @@ export const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: 8,
   },
+  storeMiniCardThreeColumns: {
+    width: '31.5%',
+  },
+  storeMiniCardFourColumns: {
+    width: '23.5%',
+  },
   storeMiniImage: {
     width: '100%',
-    height: 82,
+    aspectRatio: 1.45,
     borderRadius: 8,
     resizeMode: 'cover',
   },
@@ -1336,6 +1395,9 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 16,
+    width: '100%',
+    maxWidth: 900,
+    alignSelf: 'center',
   },
   reviewStoreHeader: {
     flexDirection: 'row-reverse',

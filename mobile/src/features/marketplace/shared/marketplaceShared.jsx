@@ -58,23 +58,22 @@ export function RText({ children, style, ...props }) {
   );
 }
 
-export function DeviceStatus() {
+export function RtlHorizontalScroll({ children, contentContainerStyle, style }) {
+  const items = React.Children.toArray(children);
+
   return (
-    <View style={styles.statusBar}>
-      <RText style={styles.statusTime}>9:41</RText>
-      <View style={styles.statusIcons}>
-        <View style={styles.signalBars}>
-          <View style={[styles.signalBar, { height: 5 }]} />
-          <View style={[styles.signalBar, { height: 8 }]} />
-          <View style={[styles.signalBar, { height: 11 }]} />
-          <View style={[styles.signalBar, { height: 14 }]} />
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={[styles.rtlHorizontalScroll, style]}
+      contentContainerStyle={[styles.rtlHorizontalContent, contentContainerStyle]}
+    >
+      {items.map((child, index) => (
+        <View key={child.key || `rtl-${index}`} style={styles.rtlHorizontalItem}>
+          {child}
         </View>
-        <RText style={styles.wifi}>5G</RText>
-        <View style={styles.battery}>
-          <View style={styles.batteryFill} />
-        </View>
-      </View>
-    </View>
+      ))}
+    </ScrollView>
   );
 }
 
@@ -305,10 +304,10 @@ export function CategoryStrip({ double = false, items = categories }) {
   );
 }
 
-export function SectionTitle({ title, icon, action = 'عرض الكل' }) {
+export function SectionTitle({ title, icon, action = 'عرض الكل', onAction }) {
   return (
     <View style={styles.sectionTitle}>
-      <TouchableOpacity>
+      <TouchableOpacity onPress={onAction} disabled={!onAction}>
         <RText style={styles.sectionAction}>{action}</RText>
       </TouchableOpacity>
       <View style={styles.sectionName}>
@@ -335,9 +334,9 @@ export function PromoBanner() {
   );
 }
 
-export function ReelCard({ item, onPress }) {
+export function ReelCard({ item, onPress, style }) {
   return (
-    <TouchableOpacity style={styles.reelCard} onPress={() => onPress?.(item)}>
+    <TouchableOpacity style={[styles.reelCard, style]} onPress={() => onPress?.(item)}>
       <Image source={item.image} style={styles.reelThumb} />
       <View style={styles.reelPlay}>
         <AppIcon icon={Icons.CirclePlay || Icons.PlayCircle} size={18} color={palette.white} />
@@ -355,9 +354,9 @@ export function ReelCard({ item, onPress }) {
   );
 }
 
-export function CouponCard({ coupon, index }) {
+export function CouponCard({ coupon, index, style }) {
   return (
-    <TouchableOpacity style={[styles.couponCard, { backgroundColor: coupon.color }]}>
+    <TouchableOpacity style={[styles.couponCard, { backgroundColor: coupon.color }, style]}>
       <View style={styles.ticketCutLeft} />
       <View style={styles.ticketCutRight} />
       <RText style={styles.couponPrice}>{coupon.label || formatSyp(50000)}</RText>
@@ -382,6 +381,7 @@ export function RatingPill({ rating = 4.5 }) {
 export function ProductCard({
   product,
   compact = false,
+  style,
   onOpen,
   onAddToCart,
   onToggleFavorite,
@@ -389,7 +389,7 @@ export function ProductCard({
 }) {
   return (
     <TouchableOpacity
-      style={[styles.productCard, compact && styles.productCardCompact]}
+      style={[styles.productCard, compact && styles.productCardCompact, style]}
       onPress={() => onOpen?.(product)}
     >
       <View style={styles.productImageBox}>
@@ -430,9 +430,8 @@ export function ProductCard({
 
 export function Tabs({ tabs, active, onChange, compact = false }) {
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
+    <RtlHorizontalScroll
+      refreshKey={`tabs-${tabs.join('|')}`}
       contentContainerStyle={[styles.tabs, compact && styles.tabsCompact]}
     >
       {tabs.map((tab) => (
@@ -444,6 +443,6 @@ export function Tabs({ tabs, active, onChange, compact = false }) {
           <RText style={[styles.tabText, active === tab && styles.tabTextActive]}>{tab}</RText>
         </TouchableOpacity>
       ))}
-    </ScrollView>
+    </RtlHorizontalScroll>
   );
 }

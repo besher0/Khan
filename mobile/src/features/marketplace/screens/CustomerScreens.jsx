@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Image, ImageBackground, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
+import { Image, ImageBackground, ScrollView, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { styles } from '../theme/styles';
 import * as Icons from '../../../../icons';
 import {
@@ -11,6 +11,7 @@ import {
   PromoBanner,
   RText,
   ReelCard,
+  RtlHorizontalScroll,
   SectionTitle,
   Tabs,
   categories as fallbackCategories,
@@ -53,6 +54,32 @@ function listOrFallback(list, fallback) {
   return Array.isArray(list) && list.length ? list : fallback;
 }
 
+function useMarketplaceLayout() {
+  const { width } = useWindowDimensions();
+  const contentWidth = Math.min(width, 1180);
+  const productCardStyle =
+    contentWidth >= 980
+      ? styles.productCardFourColumns
+      : contentWidth >= 660
+        ? styles.productCardThreeColumns
+        : null;
+  const compactProductCardStyle = contentWidth >= 660 ? styles.productCardWideCompact : null;
+  const storeCardStyle =
+    contentWidth >= 980
+      ? styles.storeMiniCardFourColumns
+      : contentWidth >= 660
+        ? styles.storeMiniCardThreeColumns
+        : null;
+  const collectionCardStyle =
+    contentWidth >= 980
+      ? styles.collectionCardFourColumns
+      : contentWidth >= 660
+        ? styles.collectionCardThreeColumns
+        : null;
+
+  return { productCardStyle, compactProductCardStyle, storeCardStyle, collectionCardStyle };
+}
+
 export function HomeScreen({
   catalog,
   loading,
@@ -63,6 +90,7 @@ export function HomeScreen({
   onAddToCart,
   onToggleFavorite,
   onOpenReel,
+  onShowAll,
   favorites,
 }) {
   const [tab, setTab] = useState('الكل');
@@ -71,6 +99,7 @@ export function HomeScreen({
   const categories = listOrFallback(catalog?.categories, fallbackCategories);
   const reels = listOrFallback(catalog?.reels, fallbackReels);
   const coupons = listOrFallback(catalog?.coupons, fallbackCoupons);
+  const { productCardStyle, compactProductCardStyle } = useMarketplaceLayout();
 
   return (
     <ScreenScroll>
@@ -78,32 +107,33 @@ export function HomeScreen({
       <DataNotice loading={loading} error={error} onRetry={onRetry} />
       <PromoBanner />
       <CategoryStrip items={categories} />
-      <SectionTitle title="ريلز خان" icon={Icons.Video} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+      <SectionTitle title="ريلز خان" icon={Icons.Video} onAction={() => onShowAll?.('reels')} />
+      <RtlHorizontalScroll refreshKey={`home-reels-${reels.length}`} contentContainerStyle={styles.horizontalCards}>
         {reels.map((item) => (
           <ReelCard key={item.id || item.title} item={item} onPress={onOpenReel} />
         ))}
-      </ScrollView>
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+      </RtlHorizontalScroll>
+      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
+      <RtlHorizontalScroll refreshKey={`home-coupons-${coupons.length}`} contentContainerStyle={styles.horizontalCards}>
         {coupons.map((coupon, index) => (
           <CouponCard key={coupon.id || `${coupon.code}-${index}`} coupon={coupon} index={index} />
         ))}
-      </ScrollView>
-      <SectionTitle title="موصى به لك" icon={Icons.Flame || Icons.Star} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+      </RtlHorizontalScroll>
+      <SectionTitle title="موصى به لك" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+      <RtlHorizontalScroll refreshKey={`home-products-${products.length}`} contentContainerStyle={styles.horizontalCards}>
         {products.slice(0, 3).map((product) => (
           <ProductCard
             key={product.id || product.title}
             product={product}
             compact
+            style={compactProductCardStyle}
             onOpen={onOpenProduct}
             onAddToCart={onAddToCart}
             onToggleFavorite={onToggleFavorite}
             isFavorite={favorites.includes(product.id || product.title)}
           />
         ))}
-      </ScrollView>
+      </RtlHorizontalScroll>
       <View style={styles.offerBand}>
         <View style={styles.offerCard}>
           <Image source={images.cup} style={styles.offerImage} />
@@ -136,6 +166,7 @@ export function HomeScreen({
           <ProductCard
             key={`grid-${product.id || product.title}`}
             product={product}
+            style={productCardStyle}
             onOpen={onOpenProduct}
             onAddToCart={onAddToCart}
             onToggleFavorite={onToggleFavorite}
@@ -160,6 +191,7 @@ export function SearchScreen({
   const [query, setQuery] = useState('');
   const productList = listOrFallback(searchResults?.products, listOrFallback(catalog?.products, fallbackProducts));
   const categories = listOrFallback(catalog?.categories, fallbackCategories);
+  const { productCardStyle } = useMarketplaceLayout();
 
   return (
     <ScreenScroll>
@@ -180,6 +212,7 @@ export function SearchScreen({
           <ProductCard
             key={`search-${product.id || product.title}`}
             product={product}
+            style={productCardStyle}
             onOpen={onOpenProduct}
             onAddToCart={onAddToCart}
             onToggleFavorite={onToggleFavorite}
@@ -201,9 +234,10 @@ function Metric({ icon, label, value }) {
   );
 }
 
-function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite, favorites }) {
+function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite, onShowAll, favorites }) {
   const products = listOrFallback(catalog?.products, fallbackProducts);
   const coupons = listOrFallback(catalog?.coupons, fallbackCoupons);
+  const { productCardStyle } = useMarketplaceLayout();
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.storeInner}>
@@ -226,12 +260,12 @@ function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite
         <Metric icon={Icons.MessageCircle} label="التقييم" value="4.5/5" />
         <Metric icon={Icons.Users} label="التعليقات" value="1,356" />
       </View>
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
+      <RtlHorizontalScroll refreshKey={`store-coupons-${coupons.length}`} contentContainerStyle={styles.horizontalCards}>
         {coupons.map((coupon, index) => (
           <CouponCard key={`store-coupon-${coupon.id || index}`} coupon={coupon} index={index} />
         ))}
-      </ScrollView>
+      </RtlHorizontalScroll>
       <View style={styles.storeRatingCard}>
         <View style={styles.ratingScoreBox}>
           <RText style={styles.bigRating}>4.5</RText>
@@ -259,6 +293,7 @@ function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite
           <ProductCard
             key={`store-${product.id || product.title}`}
             product={product}
+            style={productCardStyle}
             onOpen={onOpenProduct}
             onAddToCart={onAddToCart}
             onToggleFavorite={onToggleFavorite}
@@ -270,22 +305,23 @@ function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite
   );
 }
 
-function StoreListScreen({ catalog }) {
+function StoreListScreen({ catalog, onShowAll }) {
   const products = listOrFallback(catalog?.products, fallbackProducts);
+  const { storeCardStyle } = useMarketplaceLayout();
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.storeInner}>
       <HeaderSearch title="المتاجر" compact />
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalCards}>
+      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
+      <RtlHorizontalScroll refreshKey={`store-list-coupons-${fallbackCoupons.length}`} contentContainerStyle={styles.horizontalCards}>
         {fallbackCoupons.map((coupon, index) => (
           <CouponCard key={`list-coupon-${coupon.id || index}`} coupon={coupon} index={index} />
         ))}
-      </ScrollView>
+      </RtlHorizontalScroll>
       <Tabs tabs={['الكل', 'خصومات', 'عروض', 'إلكتروني', 'المنزل']} active="إلكتروني" onChange={() => {}} />
       <View style={styles.storeCardGrid}>
         {products.slice(0, 6).map((product) => (
-          <View key={`store-mini-${product.id || product.title}`} style={styles.storeMiniCard}>
+          <View key={`store-mini-${product.id || product.title}`} style={[styles.storeMiniCard, storeCardStyle]}>
             <Image source={product.image || images.electronics} style={styles.storeMiniImage} />
             <RText style={styles.storeMiniTitle}>{product.store || 'متجر خان'}</RText>
             <RText style={styles.storeMiniSub}>{product.category || 'إلكترونيات'}</RText>
@@ -394,7 +430,7 @@ function ReviewsScreen({ rateMode = false, onSubmitReview }) {
   );
 }
 
-export function StoreScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite, favorites, onSubmitReview }) {
+export function StoreScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite, onShowAll, favorites, onSubmitReview }) {
   const [view, setView] = useState('صفحة المتجر');
 
   return (
@@ -411,13 +447,106 @@ export function StoreScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavor
           onOpenProduct={onOpenProduct}
           onAddToCart={onAddToCart}
           onToggleFavorite={onToggleFavorite}
+          onShowAll={onShowAll}
           favorites={favorites}
         />
       ) : null}
-      {view === 'المتاجر' ? <StoreListScreen catalog={catalog} /> : null}
+      {view === 'المتاجر' ? <StoreListScreen catalog={catalog} onShowAll={onShowAll} /> : null}
       {view === 'التقييمات' ? <ReviewsScreen /> : null}
       {view === 'إرسال تقييم' ? <ReviewsScreen rateMode onSubmitReview={onSubmitReview} /> : null}
     </View>
+  );
+}
+
+export function CollectionScreen({
+  type = 'recommended',
+  catalog,
+  collectionData,
+  loading,
+  error,
+  onRetry,
+  onBack,
+  onOpenProduct,
+  onAddToCart,
+  onToggleFavorite,
+  onOpenReel,
+  favorites,
+}) {
+  const { productCardStyle, collectionCardStyle } = useMarketplaceLayout();
+  const products = Array.isArray(collectionData?.products)
+    ? collectionData.products
+    : loading ? [] : listOrFallback(catalog?.products, fallbackProducts);
+  const reels = Array.isArray(collectionData?.reels)
+    ? collectionData.reels
+    : loading ? [] : listOrFallback(catalog?.reels, fallbackReels);
+  const coupons = Array.isArray(collectionData?.coupons)
+    ? collectionData.coupons
+    : loading ? [] : listOrFallback(catalog?.coupons, fallbackCoupons);
+  const meta = {
+    reels: { title: 'كل الريلز', subtitle: 'جميع العروض المرئية', icon: Icons.Video },
+    coupons: { title: 'كل الكوبونات', subtitle: 'كل الخصومات المتاحة', icon: Icons.Ticket || Icons.Tag },
+    recommended: { title: 'كل المنتجات', subtitle: 'جميع المنتجات من هذا القسم', icon: Icons.Flame || Icons.Star },
+  }[type] || { title: 'كل المنتجات', subtitle: 'جميع العناصر المتاحة', icon: Icons.Grid2X2 };
+
+  const empty =
+    (type === 'reels' && !reels.length) ||
+    (type === 'coupons' && !coupons.length) ||
+    (!['reels', 'coupons'].includes(type) && !products.length);
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.collectionContent}>
+      <View style={styles.collectionHeader}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <View style={styles.collectionHeaderText}>
+          <View style={styles.collectionTitleRow}>
+            <AppIcon icon={meta.icon} size={18} color={palette.green} />
+            <RText style={styles.collectionTitle}>{meta.title}</RText>
+          </View>
+          <RText style={styles.collectionSub}>{meta.subtitle}</RText>
+        </View>
+      </View>
+      <DataNotice loading={loading} error={error} onRetry={onRetry} />
+
+      {type === 'reels' ? (
+        <View style={styles.collectionGrid}>
+          {reels.map((item) => (
+            <View key={`all-reel-${item.id || item.title}`} style={[styles.collectionReelTile, collectionCardStyle]}>
+              <ReelCard item={item} onPress={onOpenReel} style={styles.collectionReelCard} />
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {type === 'coupons' ? (
+        <View style={styles.collectionGrid}>
+          {coupons.map((coupon, index) => (
+            <View key={`all-coupon-${coupon.id || coupon.code || index}`} style={[styles.collectionCouponTile, collectionCardStyle]}>
+              <CouponCard coupon={coupon} index={index} style={styles.collectionCouponCard} />
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {!['reels', 'coupons'].includes(type) ? (
+        <View style={styles.productGrid}>
+          {products.map((product) => (
+            <ProductCard
+              key={`all-product-${product.id || product.title}`}
+              product={product}
+              style={productCardStyle}
+              onOpen={onOpenProduct}
+              onAddToCart={onAddToCart}
+              onToggleFavorite={onToggleFavorite}
+              isFavorite={favorites.includes(product.id || product.title)}
+            />
+          ))}
+        </View>
+      ) : null}
+
+      {empty && !loading ? <RText style={styles.collectionEmpty}>لا توجد عناصر متاحة حالياً.</RText> : null}
+    </ScrollView>
   );
 }
 

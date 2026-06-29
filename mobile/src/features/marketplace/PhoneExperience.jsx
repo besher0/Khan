@@ -4,7 +4,6 @@ import { authApi, cartApi, catalogApi, ordersApi } from '../../services/api';
 import { styles } from './theme/styles';
 import {
   AppIcon,
-  DeviceStatus,
   RText,
   normalizeCart,
   normalizeCategory,
@@ -19,6 +18,7 @@ import {
   AuthScreen,
   CartScreen,
   CheckoutScreen,
+  CollectionScreen,
   HomeScreen,
   OrderSuccessScreen,
   ProductDetailsScreen,
@@ -82,7 +82,7 @@ function canSyncProduct(product) {
 
 export default function PhoneExperience() {
   const initialScreen =
-    typeof window !== 'undefined'
+    typeof window !== 'undefined' && window.location?.search
       ? new URLSearchParams(window.location.search).get('screen') || 'home'
       : 'home';
   const [screen, setScreen] = useState(initialScreen);
@@ -90,6 +90,11 @@ export default function PhoneExperience() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState('');
   const [searchResults, setSearchResults] = useState(null);
+  const [collectionType, setCollectionType] = useState('recommended');
+  const [collectionBackScreen, setCollectionBackScreen] = useState('home');
+  const [collectionData, setCollectionData] = useState(null);
+  const [collectionLoading, setCollectionLoading] = useState(false);
+  const [collectionError, setCollectionError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState(fallbackProducts[0]);
   const [selectedReel, setSelectedReel] = useState(null);
   const [cart, setCart] = useState([]);
@@ -245,6 +250,34 @@ export default function PhoneExperience() {
     }
   };
 
+  const openCollection = async (type, backScreen = 'home') => {
+    setCollectionType(type);
+    setCollectionBackScreen(backScreen);
+    setCollectionData(null);
+    setCollectionError('');
+    setCollectionLoading(true);
+    setScreen('collection');
+
+    try {
+      if (type === 'reels') {
+        const response = await catalogApi.reels({ take: 100 });
+        setCollectionData({ reels: (response.items || []).map(normalizeReel) });
+        return;
+      }
+      if (type === 'coupons') {
+        const response = await catalogApi.coupons({ take: 100 });
+        setCollectionData({ coupons: (response.items || []).map(normalizeCoupon) });
+        return;
+      }
+      const response = await catalogApi.products({ take: 100 });
+      setCollectionData({ products: (response.items || []).map(normalizeProduct) });
+    } catch (error) {
+      setCollectionError(error.message);
+    } finally {
+      setCollectionLoading(false);
+    }
+  };
+
   const handleLogin = async (payload) => {
     setAuthLoading(true);
     setAuthError('');
@@ -317,6 +350,7 @@ export default function PhoneExperience() {
         onRetry={loadCatalog}
         onSearch={handleSearch}
         onOpenReel={openReel}
+        onShowAll={(type) => openCollection(type, 'home')}
       />
     ),
     search: (
@@ -331,7 +365,21 @@ export default function PhoneExperience() {
       <StoreScreen
         {...sharedProductProps}
         catalog={catalog}
+        onShowAll={(type) => openCollection(type, 'store')}
         onSubmitReview={() => setToast('يحتاج إرسال التقييم إلى طلب سابق من نفس المتجر')}
+      />
+    ),
+    collection: (
+      <CollectionScreen
+        {...sharedProductProps}
+        type={collectionType}
+        catalog={catalog}
+        collectionData={collectionData}
+        loading={collectionLoading}
+        error={collectionError}
+        onRetry={() => openCollection(collectionType, collectionBackScreen)}
+        onBack={() => setScreen(collectionBackScreen)}
+        onOpenReel={openReel}
       />
     ),
     reels: <ReelsScreen reel={selectedReel} onAddToCart={addToCart} onBack={() => setScreen('home')} />,
@@ -379,7 +427,6 @@ export default function PhoneExperience() {
 
   return (
     <View style={styles.phoneFrame}>
-      <DeviceStatus />
       <View style={styles.phoneContent}>{content}</View>
       {toast ? (
         <View style={styles.toast}>
