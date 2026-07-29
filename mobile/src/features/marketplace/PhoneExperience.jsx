@@ -11,7 +11,6 @@ import {
   normalizeProduct,
   normalizeReel,
   palette,
-  products as fallbackProducts,
 } from './shared/marketplaceShared';
 import * as Icons from '../../../icons';
 import {
@@ -77,7 +76,7 @@ function normalizeHomePayload(home, productsResponse) {
 }
 
 function canSyncProduct(product) {
-  return Boolean(product?.raw?.id && product?.id && !String(product.id).startsWith('fallback-'));
+  return Boolean(product?.raw?.id && product?.id);
 }
 
 export default function PhoneExperience() {
@@ -95,7 +94,7 @@ export default function PhoneExperience() {
   const [collectionData, setCollectionData] = useState(null);
   const [collectionLoading, setCollectionLoading] = useState(false);
   const [collectionError, setCollectionError] = useState('');
-  const [selectedProduct, setSelectedProduct] = useState(fallbackProducts[0]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedReel, setSelectedReel] = useState(null);
   const [cart, setCart] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -283,6 +282,22 @@ export default function PhoneExperience() {
     setAuthError('');
     try {
       const nextSession = await authApi.login(payload, 'customer');
+      const role = nextSession?.user?.role;
+
+      if (role === 'ADMIN' || role === 'OPS') {
+        authApi.clearSession('customer');
+        authApi.setSession(nextSession, 'admin');
+        if (typeof window !== 'undefined') window.location.assign('/dashboard/admin');
+        return;
+      }
+
+      if (role === 'MERCHANT') {
+        authApi.clearSession('customer');
+        authApi.setSession(nextSession, 'merchant');
+        if (typeof window !== 'undefined') window.location.assign('/dashboard/merchant');
+        return;
+      }
+
       setSession(nextSession);
       setToast('تم تسجيل الدخول وربط الحساب');
       setScreen('home');

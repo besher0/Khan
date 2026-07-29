@@ -3,7 +3,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProductStatus, StoreStatus } from '@prisma/client';
+import {
+  CouponStatus,
+  Prisma,
+  ProductStatus,
+  ReelStatus,
+  StoreStatus,
+  SubscriptionStatus,
+} from '@prisma/client';
 import { slugify } from '../common/utils/slugify';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -24,7 +31,14 @@ export class MerchantService {
   async getStore(userId: string) {
     const store = await this.prisma.store.findFirst({
       where: { ownerId: userId },
-      include: { category: true },
+      include: {
+        subscriptions: {
+          where: { status: SubscriptionStatus.ACTIVE },
+          include: { package: true },
+          orderBy: { startsAt: 'desc' },
+          take: 1,
+        },
+      },
     });
     if (!store) throw new NotFoundException('Merchant store not found');
     return store;
@@ -36,10 +50,17 @@ export class MerchantService {
       throw new BadRequestException('Merchant already has a store');
     }
 
+    const storePackage = await this.prisma.storePackage.findFirst({
+      where: { slug: 'basic', isActive: true },
+    });
+    if (!storePackage) throw new BadRequestException('Basic store package is not configured');
+    const startsAt = new Date();
+    const endsAt = new Date(startsAt);
+    endsAt.setUTCDate(endsAt.getUTCDate() + storePackage.durationDays);
+
     return this.prisma.store.create({
       data: {
         ownerId: userId,
-        categoryId: dto.categoryId,
         name: dto.name,
         slug: this.uniqueSlug(dto.name),
         description: dto.description,
@@ -48,6 +69,9 @@ export class MerchantService {
         openingTime: dto.openingTime,
         closingTime: dto.closingTime,
         status: StoreStatus.PENDING,
+        subscriptions: {
+          create: { packageId: storePackage.id, startsAt, endsAt },
+        },
       },
     });
   }
@@ -57,7 +81,6 @@ export class MerchantService {
     return this.prisma.store.update({
       where: { id: store.id },
       data: {
-        categoryId: dto.categoryId,
         name: dto.name,
         description: dto.description,
         logoUrl: dto.logoUrl,
@@ -79,6 +102,7 @@ export class MerchantService {
 
   async createProduct(userId: string, dto: CreateProductDto) {
     const store = await this.requireStore(userId);
+    await this.requirePackageCapacity(store.id, 'products');
     return this.prisma.product.create({
       data: {
         storeId: store.id,
@@ -151,6 +175,7 @@ export class MerchantService {
 
   async createCoupon(userId: string, dto: CreateCouponDto) {
     const store = await this.requireStore(userId);
+    await this.requirePackageCapacity(store.id, 'coupons');
     return this.prisma.coupon.create({
       data: {
         storeId: store.id,
@@ -194,6 +219,7 @@ export class MerchantService {
 
   async createReel(userId: string, dto: CreateReelDto) {
     const store = await this.requireStore(userId);
+    await this.requirePackageCapacity(store.id, 'reels');
     if (dto.productId) await this.requireProduct(store.id, dto.productId);
     return this.prisma.reel.create({
       data: {
@@ -249,6 +275,54 @@ export class MerchantService {
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
+  }
+
+  private async requirePackageCapacity(
+    storeId: string,
+    resource: 'products' | 'reels' | 'coupons',
+  ) {
+    const subscription = await this.prisma.storeSubscription.findFirst({
+      where: {
+        storeId,
+        status: SubscriptionStatus.ACTIVE,
+        endsAt: { gt: new Date() },
+      },
+      include: { package: true },
+      orderBy: { startsAt: 'desc' },
+    });
+    if (!subscription) {
+      throw new BadRequestException('اشتراك المتجر غير موجود أو منتهي');
+    }
+
+    const config = {
+      products: {
+        limit: subscription.package.maxProducts,
+        count: () => this.prisma.product.count({
+          where: { storeId, status: { not: ProductStatus.ARCHIVED } },
+        }),
+        label: 'المنتجات',
+      },
+      reels: {
+        limit: subscription.package.maxReels,
+        count: () => this.prisma.reel.count({
+          where: { storeId, status: { not: ReelStatus.ARCHIVED } },
+        }),
+        label: 'الريلز',
+      },
+      coupons: {
+        limit: subscription.package.maxCoupons,
+        count: () => this.prisma.coupon.count({
+          where: { storeId, status: CouponStatus.ACTIVE },
+        }),
+        label: 'الكوبونات النشطة',
+      },
+    }[resource];
+
+    if ((await config.count()) >= config.limit) {
+      throw new BadRequestException(
+        `وصل المتجر إلى حد ${config.label} في باقة ${subscription.package.name}`,
+      );
+    }
   }
 
   private uniqueSlug(value: string) {

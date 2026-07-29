@@ -11,6 +11,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SecurityModule } from './common/security.module';
 import { FavoritesModule } from './favorites/favorites.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { FavoritesModule } from './favorites/favorites.module';
     AdminModule,
     ReviewsModule,
     FavoritesModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

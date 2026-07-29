@@ -19,26 +19,20 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const email = dto.email.toLowerCase().trim();
+    const phone = this.normalizePhone(dto.phone);
     const role = dto.role === UserRole.MERCHANT ? UserRole.MERCHANT : UserRole.CUSTOMER;
 
     const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          ...(dto.phone ? [{ phone: dto.phone }] : []),
-        ],
-      },
+      where: { phone },
     });
 
     if (existing) {
-      throw new BadRequestException('Email or phone is already registered');
+      throw new BadRequestException('Phone is already registered');
     }
 
     const user = await this.prisma.user.create({
       data: {
-        email,
-        phone: dto.phone,
+        phone,
         firstName: dto.firstName,
         lastName: dto.lastName,
         role,
@@ -49,13 +43,13 @@ export class AuthService {
 
     return {
       user,
-      tokens: await this.signTokens(user.id, user.email, user.role),
+      tokens: await this.signTokens(user.id, user.phone, user.role),
     };
   }
 
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase().trim() },
+      where: { phone: this.normalizePhone(dto.phone) },
     });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
@@ -77,7 +71,7 @@ export class AuthService {
         role: user.role,
         status: user.status,
       },
-      tokens: await this.signTokens(user.id, user.email, user.role),
+      tokens: await this.signTokens(user.id, user.phone, user.role),
     };
   }
 
@@ -95,14 +89,14 @@ export class AuthService {
         throw new UnauthorizedException('Invalid refresh token');
       }
 
-      return { tokens: await this.signTokens(user.id, user.email, user.role) };
+      return { tokens: await this.signTokens(user.id, user.phone, user.role) };
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
   }
 
-  private async signTokens(userId: string, email: string, role: UserRole) {
-    const payload = { sub: userId, email, role };
+  private async signTokens(userId: string, phone: string, role: UserRole) {
+    const payload = { sub: userId, phone, role };
     const accessToken = await this.jwt.signAsync(payload, {
       secret: this.config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-access-secret',
       expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m',
@@ -126,5 +120,9 @@ export class AuthService {
       status: true,
       createdAt: true,
     };
+  }
+
+  private normalizePhone(phone: string) {
+    return phone.trim().replace(/\s+/g, '');
   }
 }

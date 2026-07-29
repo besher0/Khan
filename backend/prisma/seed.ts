@@ -1,5 +1,4 @@
 import {
-  CategoryType,
   CouponType,
   PaymentMethod,
   ProductStatus,
@@ -21,6 +20,7 @@ async function main() {
       update: {},
       create: {
         email: 'admin@khan.local',
+        phone: '0990000001',
         firstName: 'Khan',
         lastName: 'Admin',
         role: UserRole.ADMIN,
@@ -32,6 +32,7 @@ async function main() {
       update: {},
       create: {
         email: 'ops@khan.local',
+        phone: '0990000002',
         firstName: 'Khan',
         lastName: 'Ops',
         role: UserRole.OPS,
@@ -84,7 +85,6 @@ async function main() {
     create: {
       name: 'Electronics',
       slug: 'electronics',
-      type: CategoryType.BOTH,
       imageUrl: '/uploads/categories/electronics.jpg',
     },
   });
@@ -95,7 +95,6 @@ async function main() {
     create: {
       name: 'Gifts',
       slug: 'gifts',
-      type: CategoryType.BOTH,
       imageUrl: '/uploads/categories/gifts.jpg',
     },
   });
@@ -105,7 +104,6 @@ async function main() {
     update: {},
     create: {
       ownerId: merchant.id,
-      categoryId: electronics.id,
       name: 'Smart Store',
       slug: 'smart-store',
       description: 'Approved demo electronics store for Khan.',

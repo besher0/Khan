@@ -104,6 +104,17 @@ function del(path, options) {
   });
 }
 
+function upload(path, file, options) {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch(path, {
+    method: 'POST',
+    body,
+    json: false,
+    ...options,
+  });
+}
+
 async function loginAs(area, credentials) {
   const session = await post('/auth/login', credentials);
   writeSession(session, area);
@@ -130,10 +141,14 @@ export const authApi = {
   },
   ensureMerchantSession: () =>
     readSession('merchant') ||
-    loginAs('merchant', { email: 'merchant@khan.local', password: 'Password123!' }),
+    loginAs('merchant', { phone: '0999000001', password: 'Password123!' }),
   ensureAdminSession: () =>
     readSession('admin') ||
-    loginAs('admin', { email: 'admin@khan.local', password: 'Password123!' }),
+    loginAs('admin', { phone: '0990000001', password: 'Password123!' }),
+};
+
+export const uploadsApi = {
+  file: (file, area = 'admin') => upload('/uploads', file, { authArea: area }),
 };
 
 export const catalogApi = {
@@ -203,7 +218,14 @@ export const merchantApi = {
 };
 
 export const adminApi = {
+  createCategory: (payload) => post('/admin/categories', payload, { authArea: 'admin' }),
+  packages: () => apiFetch('/admin/packages', { authArea: 'admin' }),
+  createPackage: (payload) => post('/admin/packages', payload, { authArea: 'admin' }),
+  updatePackage: (id, payload) => patch(`/admin/packages/${id}`, payload, { authArea: 'admin' }),
   stores: () => apiFetch('/admin/stores', { authArea: 'admin' }),
+  createStore: (payload) => post('/admin/stores', payload, { authArea: 'admin' }),
+  assignStorePackage: (id, packageId) =>
+    post(`/admin/stores/${id}/subscription`, { packageId }, { authArea: 'admin' }),
   updateStoreStatus: (id, status) => patch(`/admin/stores/${id}/status`, { status }, { authArea: 'admin' }),
   orders: () => apiFetch('/admin/orders', { authArea: 'admin' }),
   updateOrderStatus: (id, payload) => patch(`/admin/orders/${id}/status`, payload, { authArea: 'admin' }),

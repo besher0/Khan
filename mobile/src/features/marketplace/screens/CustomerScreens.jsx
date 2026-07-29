@@ -8,19 +8,14 @@ import {
   CouponCard,
   HeaderSearch,
   ProductCard,
-  PromoBanner,
   RText,
   ReelCard,
   RtlHorizontalScroll,
   SectionTitle,
   Tabs,
-  categories as fallbackCategories,
-  coupons as fallbackCoupons,
   formatSyp,
   images,
   palette,
-  products as fallbackProducts,
-  reels as fallbackReels,
 } from '../shared/marketplaceShared';
 
 function ScreenScroll({ children }) {
@@ -50,26 +45,20 @@ function DataNotice({ loading, error, onRetry }) {
   );
 }
 
-function listOrFallback(list, fallback) {
-  return Array.isArray(list) && list.length ? list : fallback;
+function listOrEmpty(list) {
+  return Array.isArray(list) ? list.filter(Boolean) : [];
 }
+
+const PRODUCT_GRID_GAP = 5;
 
 function useMarketplaceLayout() {
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width, 1180);
-  const productCardStyle =
-    contentWidth >= 980
-      ? styles.productCardFourColumns
-      : contentWidth >= 660
-        ? styles.productCardThreeColumns
-        : null;
-  const compactProductCardStyle = contentWidth >= 660 ? styles.productCardWideCompact : null;
-  const storeCardStyle =
-    contentWidth >= 980
-      ? styles.storeMiniCardFourColumns
-      : contentWidth >= 660
-        ? styles.storeMiniCardThreeColumns
-        : null;
+  const productColumns = contentWidth >= 980 ? 4 : contentWidth >= 660 ? 3 : 2;
+  const productGridWidth = Math.max(0, contentWidth - 32);
+  const productCardStyle = {
+    width: (productGridWidth - PRODUCT_GRID_GAP * (productColumns - 1)) / productColumns,
+  };
   const collectionCardStyle =
     contentWidth >= 980
       ? styles.collectionCardFourColumns
@@ -77,7 +66,7 @@ function useMarketplaceLayout() {
         ? styles.collectionCardThreeColumns
         : null;
 
-  return { productCardStyle, compactProductCardStyle, storeCardStyle, collectionCardStyle };
+  return { productCardStyle, collectionCardStyle };
 }
 
 export function HomeScreen({
@@ -93,74 +82,39 @@ export function HomeScreen({
   onShowAll,
   favorites,
 }) {
-  const [tab, setTab] = useState('الكل');
   const [query, setQuery] = useState('');
-  const products = listOrFallback(catalog?.products, fallbackProducts);
-  const categories = listOrFallback(catalog?.categories, fallbackCategories);
-  const reels = listOrFallback(catalog?.reels, fallbackReels);
-  const coupons = listOrFallback(catalog?.coupons, fallbackCoupons);
-  const { productCardStyle, compactProductCardStyle } = useMarketplaceLayout();
+  const products = listOrEmpty(catalog?.products);
+  const categories = listOrEmpty(catalog?.categories);
+  const reels = listOrEmpty(catalog?.reels);
+  const coupons = listOrEmpty(catalog?.coupons);
+  const { productCardStyle } = useMarketplaceLayout();
 
   return (
     <ScreenScroll>
       <HeaderSearch value={query} onChangeText={setQuery} onSubmit={() => onSearch?.(query)} />
       <DataNotice loading={loading} error={error} onRetry={onRetry} />
-      <PromoBanner />
       <CategoryStrip items={categories} />
-      <SectionTitle title="ريلز خان" icon={Icons.Video} onAction={() => onShowAll?.('reels')} />
-      <RtlHorizontalScroll refreshKey={`home-reels-${reels.length}`} contentContainerStyle={styles.horizontalCards}>
-        {reels.map((item) => (
-          <ReelCard key={item.id || item.title} item={item} onPress={onOpenReel} />
-        ))}
-      </RtlHorizontalScroll>
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
-      <RtlHorizontalScroll refreshKey={`home-coupons-${coupons.length}`} contentContainerStyle={styles.horizontalCards}>
-        {coupons.map((coupon, index) => (
-          <CouponCard key={coupon.id || `${coupon.code}-${index}`} coupon={coupon} index={index} />
-        ))}
-      </RtlHorizontalScroll>
-      <SectionTitle title="موصى به لك" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
-      <RtlHorizontalScroll refreshKey={`home-products-${products.length}`} contentContainerStyle={styles.horizontalCards}>
-        {products.slice(0, 3).map((product) => (
-          <ProductCard
-            key={product.id || product.title}
-            product={product}
-            compact
-            style={compactProductCardStyle}
-            onOpen={onOpenProduct}
-            onAddToCart={onAddToCart}
-            onToggleFavorite={onToggleFavorite}
-            isFavorite={favorites.includes(product.id || product.title)}
-          />
-        ))}
-      </RtlHorizontalScroll>
-      <View style={styles.offerBand}>
-        <View style={styles.offerCard}>
-          <Image source={images.cup} style={styles.offerImage} />
-          <View style={styles.offerText}>
-            <RText style={styles.offerTitle}>توصيل مجاني</RText>
-            <RText style={styles.offerSub}>اشتري بـ 500 ألف أو أكثر</RText>
-            <TouchableOpacity style={styles.offerButton}>
-              <RText style={styles.offerButtonText}>تسوق الآن</RText>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={[styles.offerCard, styles.offerCardAmber]}>
-          <Image source={images.giftBox} style={styles.offerImage} />
-          <View style={styles.offerText}>
-            <RText style={styles.offerTitle}>خصم حتى 10%</RText>
-            <RText style={styles.offerSub}>اشتر ووفر أكثر</RText>
-            <TouchableOpacity style={[styles.offerButton, styles.offerButtonAmber]}>
-              <RText style={styles.offerButtonText}>تسوق الآن</RText>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-      <Tabs
-        tabs={['الكل', 'عروض', 'أدوات منزلية', 'ألعاب أطفال', 'المنزل', 'الأزياء']}
-        active={tab}
-        onChange={setTab}
-      />
+      {reels.length ? (
+        <>
+          <SectionTitle title="ريلز خان" icon={Icons.Video} onAction={() => onShowAll?.('reels')} />
+          <RtlHorizontalScroll refreshKey={`home-reels-${reels.length}`} contentContainerStyle={styles.horizontalCards}>
+            {reels.map((item) => (
+              <ReelCard key={item.id || item.title} item={item} onPress={onOpenReel} />
+            ))}
+          </RtlHorizontalScroll>
+        </>
+      ) : null}
+      {coupons.length ? (
+        <>
+          <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
+          <RtlHorizontalScroll refreshKey={`home-coupons-${coupons.length}`} contentContainerStyle={styles.horizontalCards}>
+            {coupons.map((coupon, index) => (
+              <CouponCard key={coupon.id || `${coupon.code}-${index}`} coupon={coupon} index={index} />
+            ))}
+          </RtlHorizontalScroll>
+        </>
+      ) : null}
+      {products.length ? <SectionTitle title="المنتجات" icon={Icons.Package} onAction={() => onShowAll?.('recommended')} /> : null}
       <View style={styles.productGrid}>
         {products.map((product) => (
           <ProductCard
@@ -174,6 +128,9 @@ export function HomeScreen({
           />
         ))}
       </View>
+      {!loading && !products.length && !reels.length && !coupons.length ? (
+        <RText style={styles.collectionEmpty}>لا توجد بيانات متاحة حالياً.</RText>
+      ) : null}
     </ScreenScroll>
   );
 }
@@ -187,10 +144,9 @@ export function SearchScreen({
   onToggleFavorite,
   favorites,
 }) {
-  const [tab, setTab] = useState('الكل');
   const [query, setQuery] = useState('');
-  const productList = listOrFallback(searchResults?.products, listOrFallback(catalog?.products, fallbackProducts));
-  const categories = listOrFallback(catalog?.categories, fallbackCategories);
+  const productList = searchResults ? listOrEmpty(searchResults.products) : listOrEmpty(catalog?.products);
+  const categories = listOrEmpty(catalog?.categories);
   const { productCardStyle } = useMarketplaceLayout();
 
   return (
@@ -202,11 +158,6 @@ export function SearchScreen({
         onSubmit={() => onSearch?.(query)}
       />
       <CategoryStrip double items={categories} />
-      <Tabs
-        tabs={['الكل', 'عروض', 'ألعاب أطفال', 'المنزل', 'الأزياء']}
-        active={tab}
-        onChange={setTab}
-      />
       <View style={styles.productGrid}>
         {productList.map((product) => (
           <ProductCard
@@ -220,143 +171,34 @@ export function SearchScreen({
           />
         ))}
       </View>
+      {!productList.length ? <RText style={styles.collectionEmpty}>لا توجد منتجات مطابقة.</RText> : null}
     </ScreenScroll>
   );
 }
 
-function Metric({ icon, label, value }) {
-  return (
-    <View style={styles.metric}>
-      <AppIcon icon={icon} size={18} color={palette.muted} />
-      <RText style={styles.metricLabel}>{label}</RText>
-      <RText style={styles.metricValue}>{value}</RText>
-    </View>
-  );
-}
-
 function StoreInfoScreen({ catalog, onOpenProduct, onAddToCart, onToggleFavorite, onShowAll, favorites }) {
-  const products = listOrFallback(catalog?.products, fallbackProducts);
-  const coupons = listOrFallback(catalog?.coupons, fallbackCoupons);
-  const { productCardStyle } = useMarketplaceLayout();
-
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.storeInner}>
-      <View style={styles.storeTopActions}>
-        <TouchableOpacity style={styles.roundIconGhost}>
-          <AppIcon icon={Icons.Heart} size={18} color={palette.amber} />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.roundIconGhost}>
-          <AppIcon icon={Icons.Share2} size={18} color={palette.amber} />
-        </TouchableOpacity>
-        <RText style={styles.storeScreenTitle}>متجر خان</RText>
-        <TouchableOpacity style={styles.greenTiny}>
-          <AppIcon icon={Icons.ArrowLeft} size={16} color={palette.white} />
-        </TouchableOpacity>
-      </View>
-      <Image source={images.storeBanner} style={styles.storeHero} />
-      <View style={styles.storeStats}>
-        <Metric icon={Icons.Clock} label="ساعات العمل" value="9:00 - 23:00" />
-        <Metric icon={Icons.Tag} label="الفئة" value="إلكترونيات" />
-        <Metric icon={Icons.MessageCircle} label="التقييم" value="4.5/5" />
-        <Metric icon={Icons.Users} label="التعليقات" value="1,356" />
-      </View>
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
-      <RtlHorizontalScroll refreshKey={`store-coupons-${coupons.length}`} contentContainerStyle={styles.horizontalCards}>
-        {coupons.map((coupon, index) => (
-          <CouponCard key={`store-coupon-${coupon.id || index}`} coupon={coupon} index={index} />
-        ))}
-      </RtlHorizontalScroll>
-      <View style={styles.storeRatingCard}>
-        <View style={styles.ratingScoreBox}>
-          <RText style={styles.bigRating}>4.5</RText>
-          <View style={styles.starsRow}>
-            {[0, 1, 2, 3, 4].map((item) => (
-              <AppIcon key={item} icon={Icons.Star} size={14} color={palette.green} />
-            ))}
-          </View>
-          <RText style={styles.tinyMuted}>1,212 تعليق</RText>
-        </View>
-        <View style={styles.ratingBars}>
-          {[834, 88, 32, 12, 4].map((value, index) => (
-            <View key={value} style={styles.ratingBarLine}>
-              <RText style={styles.ratingLabel}>{5 - index} نجوم</RText>
-              <View style={styles.ratingTrack}>
-                <View style={[styles.ratingFill, { width: `${Math.max(12, value / 8.5)}%` }]} />
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-      <Tabs tabs={['الكل', 'عروض', 'أدوات منزلية', 'ألعاب أطفال', 'المنزل']} active="الكل" onChange={() => {}} />
-      <View style={styles.productGrid}>
-        {products.slice(0, 4).map((product) => (
-          <ProductCard
-            key={`store-${product.id || product.title}`}
-            product={product}
-            style={productCardStyle}
-            onOpen={onOpenProduct}
-            onAddToCart={onAddToCart}
-            onToggleFavorite={onToggleFavorite}
-            isFavorite={favorites.includes(product.id || product.title)}
-          />
-        ))}
-      </View>
+      <RText style={styles.collectionEmpty}>لا توجد بيانات متجر محدد حالياً.</RText>
     </ScrollView>
   );
 }
 
 function StoreListScreen({ catalog, onShowAll }) {
-  const products = listOrFallback(catalog?.products, fallbackProducts);
-  const { storeCardStyle } = useMarketplaceLayout();
-
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.storeInner}>
       <HeaderSearch title="المتاجر" compact />
-      <SectionTitle title="كوبونات خان" icon={Icons.Ticket || Icons.Tag} onAction={() => onShowAll?.('coupons')} />
-      <RtlHorizontalScroll refreshKey={`store-list-coupons-${fallbackCoupons.length}`} contentContainerStyle={styles.horizontalCards}>
-        {fallbackCoupons.map((coupon, index) => (
-          <CouponCard key={`list-coupon-${coupon.id || index}`} coupon={coupon} index={index} />
-        ))}
-      </RtlHorizontalScroll>
-      <Tabs tabs={['الكل', 'خصومات', 'عروض', 'إلكتروني', 'المنزل']} active="إلكتروني" onChange={() => {}} />
-      <View style={styles.storeCardGrid}>
-        {products.slice(0, 6).map((product) => (
-          <View key={`store-mini-${product.id || product.title}`} style={[styles.storeMiniCard, storeCardStyle]}>
-            <Image source={product.image || images.electronics} style={styles.storeMiniImage} />
-            <RText style={styles.storeMiniTitle}>{product.store || 'متجر خان'}</RText>
-            <RText style={styles.storeMiniSub}>{product.category || 'إلكترونيات'}</RText>
-            <View style={styles.storeMiniRating}>
-              <RText style={styles.storeMiniRatingText}>4.5</RText>
-              <AppIcon icon={Icons.Star} size={11} color={palette.amber} />
-            </View>
-            <TouchableOpacity style={styles.visitButton}>
-              <RText style={styles.visitText}>زيارة المتجر</RText>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </View>
+      <RText style={styles.collectionEmpty}>لا توجد متاجر متاحة من الباك إند حالياً.</RText>
     </ScrollView>
   );
 }
 
 function ReviewsScreen({ rateMode = false, onSubmitReview }) {
   const [comment, setComment] = useState('');
-  const sampleNames = ['أحمد هندي', 'رامي محمد', 'حسام حسين', 'محمد محمد'];
 
   if (rateMode) {
     return (
       <View style={styles.rateScreen}>
-        <View style={styles.reviewStoreHeader}>
-          <View style={styles.storeAvatarLarge} />
-          <View style={{ flex: 1 }}>
-            <RText style={styles.reviewStoreName}>متجر خان</RText>
-            <RText style={styles.categoryChipText}>إلكترونيات</RText>
-            <View style={styles.locationLine}>
-              <AppIcon icon={Icons.MapPin} size={14} color={palette.amber} />
-              <RText style={styles.tinyMuted}>دمشق</RText>
-            </View>
-          </View>
-        </View>
         <RText style={styles.rateQuestion}>كيف كانت تجربتك في المتجر؟</RText>
         <View style={styles.rateStars}>
           {[0, 1, 2, 3, 4].map((item) => (
@@ -391,41 +233,7 @@ function ReviewsScreen({ rateMode = false, onSubmitReview }) {
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.storeInner}>
-      <View style={styles.storeRatingCard}>
-        <View style={styles.ratingScoreBox}>
-          <RText style={styles.bigRating}>4.5</RText>
-          <View style={styles.starsRow}>
-            {[0, 1, 2, 3, 4].map((item) => (
-              <AppIcon key={item} icon={Icons.Star} size={14} color={palette.green} />
-            ))}
-          </View>
-          <RText style={styles.tinyMuted}>1,212 تعليق</RText>
-        </View>
-        <TouchableOpacity style={styles.rateButton}>
-          <RText style={styles.rateButtonText}>قيّم هذا المتجر</RText>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.commentHeader}>
-        <RText style={styles.sectionHeading}>جميع التعليقات (1,232)</RText>
-        <RText style={styles.tinyMuted}>الترتيب: الأحدث أولًا</RText>
-      </View>
-      {sampleNames.map((name) => (
-        <View key={name} style={styles.commentCard}>
-          <View style={styles.commentAvatar}>
-            <AppIcon icon={Icons.User} size={22} color={palette.muted} />
-          </View>
-          <View style={styles.commentContent}>
-            <RText style={styles.commentName}>{name}</RText>
-            <View style={styles.starsRow}>
-              {[0, 1, 2, 3, 4].map((item) => (
-                <AppIcon key={item} icon={Icons.Star} size={13} color={palette.amber} />
-              ))}
-            </View>
-            <RText style={styles.commentText}>جودة ممتازة جدًا وخصومات رائعة.</RText>
-          </View>
-          <RText style={styles.commentDate}>22/2/2026</RText>
-        </View>
-      ))}
+      <RText style={styles.collectionEmpty}>لا توجد تقييمات متاحة من الباك إند حالياً.</RText>
     </ScrollView>
   );
 }
@@ -475,13 +283,13 @@ export function CollectionScreen({
   const { productCardStyle, collectionCardStyle } = useMarketplaceLayout();
   const products = Array.isArray(collectionData?.products)
     ? collectionData.products
-    : loading ? [] : listOrFallback(catalog?.products, fallbackProducts);
+    : loading ? [] : listOrEmpty(catalog?.products);
   const reels = Array.isArray(collectionData?.reels)
     ? collectionData.reels
-    : loading ? [] : listOrFallback(catalog?.reels, fallbackReels);
+    : loading ? [] : listOrEmpty(catalog?.reels);
   const coupons = Array.isArray(collectionData?.coupons)
     ? collectionData.coupons
-    : loading ? [] : listOrFallback(catalog?.coupons, fallbackCoupons);
+    : loading ? [] : listOrEmpty(catalog?.coupons);
   const meta = {
     reels: { title: 'كل الريلز', subtitle: 'جميع العروض المرئية', icon: Icons.Video },
     coupons: { title: 'كل الكوبونات', subtitle: 'كل الخصومات المتاحة', icon: Icons.Ticket || Icons.Tag },
@@ -574,7 +382,13 @@ export function ProductDetailsScreen({
       </View>
 
       <View style={styles.detailsImageWrap}>
-        <Image source={product.image} style={styles.detailsImage} />
+        {product.image ? (
+          <Image source={product.image} style={styles.detailsImage} />
+        ) : (
+          <View style={[styles.detailsImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.greenSoft }]}>
+            <AppIcon icon={Icons.Package} size={42} color={palette.green} />
+          </View>
+        )}
         <TouchableOpacity style={styles.detailsFavorite} onPress={() => onToggleFavorite(product)}>
           <AppIcon
             icon={Icons.Heart}
@@ -599,7 +413,7 @@ export function ProductDetailsScreen({
             </View>
           ) : <View />}
           <View style={styles.detailsRating}>
-            <RText style={styles.detailsRatingText}>{Number(product.rating || 4.5).toFixed(1)}</RText>
+            <RText style={styles.detailsRatingText}>{Number(product.rating || 0).toFixed(1)}</RText>
             <AppIcon icon={Icons.Star} size={14} color={palette.amber} />
           </View>
         </View>
@@ -608,7 +422,7 @@ export function ProductDetailsScreen({
           <View style={styles.detailsStoreAvatar} />
           <View style={{ flex: 1 }}>
             <RText style={styles.detailsStoreName}>{product.store}</RText>
-            <RText style={styles.tinyMuted}>متجر موثوق في خان</RText>
+            <RText style={styles.tinyMuted}>{product.category || '-'}</RText>
           </View>
           <TouchableOpacity style={styles.detailsStoreButton}>
             <RText style={styles.detailsStoreButtonText}>زيارة المتجر</RText>
@@ -618,8 +432,7 @@ export function ProductDetailsScreen({
         <View style={styles.detailsDivider} />
         <RText style={styles.detailsSectionTitle}>وصف المنتج</RText>
         <RText style={styles.detailsDescription}>
-          منتج مختار بعناية، بجودة عالية وتصميم عملي للاستخدام اليومي. العرض متوفر لفترة محدودة
-          مع إمكانية التوصيل المجاني حسب المتجر.
+          {product.description || 'لا يوجد وصف لهذا المنتج.'}
         </RText>
         <View style={styles.detailsQuantityRow}>
           <RText style={styles.detailsSectionTitle}>الكمية</RText>
@@ -678,7 +491,13 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
 
       {cart.map(({ id, product, quantity }) => (
         <View key={id || product.id || product.title} style={styles.cartItem}>
-          <Image source={product.image} style={styles.cartItemImage} />
+          {product.image ? (
+            <Image source={product.image} style={styles.cartItemImage} />
+          ) : (
+            <View style={[styles.cartItemImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.greenSoft }]}>
+              <AppIcon icon={Icons.Package} size={22} color={palette.green} />
+            </View>
+          )}
           <View style={styles.cartItemBody}>
             <RText numberOfLines={2} style={styles.cartItemTitle}>{product.title}</RText>
             <RText style={styles.cartItemStore}>{product.store}</RText>
@@ -822,7 +641,7 @@ export function OrderSuccessScreen({ order, onHome }) {
       <RText style={styles.successText}>سنرسل لك تحديثات الطلب وحالة التوصيل أولًا بأول.</RText>
       <View style={styles.successOrderNumber}>
         <RText style={styles.tinyMuted}>رقم الطلب</RText>
-        <RText style={styles.successNumber}>{order?.number || 'KH-2026-1048'}</RText>
+        <RText style={styles.successNumber}>{order?.number || '-'}</RText>
       </View>
       <TouchableOpacity style={styles.successButton} onPress={onHome}>
         <RText style={styles.successButtonText}>العودة إلى الرئيسية</RText>
@@ -833,65 +652,101 @@ export function OrderSuccessScreen({ order, onHome }) {
 
 export function ReelsScreen({ reel, onAddToCart, onBack }) {
   const [quantity, setQuantity] = useState(1);
-  const currentProduct = reel?.product || fallbackProducts[2];
+  const currentProduct = reel?.product;
+
+  if (!reel) {
+    return (
+      <View style={styles.emptyCart}>
+        <View style={styles.emptyCartIcon}>
+          <AppIcon icon={Icons.Video} size={38} color={palette.green} />
+        </View>
+        <RText style={styles.emptyCartTitle}>لا توجد ريلز متاحة</RText>
+        <TouchableOpacity style={styles.emptyCartButton} onPress={onBack}>
+          <RText style={styles.emptyCartButtonText}>العودة</RText>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.reelsScreen}>
-      <ImageBackground source={reel?.image || images.reelPhone} style={styles.reelsBackground} resizeMode="cover">
-        <View style={styles.reelsOverlay}>
-          <View style={styles.reelsTopButtons}>
-            <View style={styles.reelsLeftButtons}>
-              <TouchableOpacity style={styles.reelsButton}>
-                <AppIcon icon={Icons.Share2} size={18} color={palette.green} />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.reelsButton}>
-                <AppIcon icon={Icons.ShoppingBag} size={18} color={palette.green} />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity style={styles.reelsButton} onPress={onBack}>
-              <AppIcon icon={Icons.ChevronLeft} size={20} color={palette.green} />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.reelsCartSheet}>
-            <RText style={styles.detailsStoreName}>{reel?.title || 'عرض خان'}</RText>
-            <View style={styles.qtyRow}>
-              <RText style={styles.sheetPrice}>{formatSyp((currentProduct.priceValue || 0) * quantity)}</RText>
-              <View style={styles.qtyControls}>
-                <TouchableOpacity style={styles.qtyButton} onPress={() => setQuantity((current) => Math.max(1, current - 1))}>
-                  <AppIcon icon={Icons.Minus} size={14} color={palette.muted} />
+      {reel.image ? (
+        <ImageBackground source={reel.image} style={styles.reelsBackground} resizeMode="cover">
+          <View style={styles.reelsOverlay}>
+            <View style={styles.reelsTopButtons}>
+              <View style={styles.reelsLeftButtons}>
+                <TouchableOpacity style={styles.reelsButton}>
+                  <AppIcon icon={Icons.Share2} size={18} color={palette.green} />
                 </TouchableOpacity>
-                <RText style={styles.qtyValue}>{quantity}</RText>
-                <TouchableOpacity style={styles.qtyButton} onPress={() => setQuantity((current) => current + 1)}>
-                  <AppIcon icon={Icons.Plus} size={14} color={palette.muted} />
+                <TouchableOpacity style={styles.reelsButton}>
+                  <AppIcon icon={Icons.ShoppingBag} size={18} color={palette.green} />
                 </TouchableOpacity>
-                <RText style={styles.qtyLabel}>العناصر المختارة</RText>
               </View>
+              <TouchableOpacity style={styles.reelsButton} onPress={onBack}>
+                <AppIcon icon={Icons.ChevronLeft} size={20} color={palette.green} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity style={styles.addToCartButton} onPress={() => onAddToCart(currentProduct, quantity)}>
-              <AppIcon icon={Icons.ShoppingCart} size={22} color={palette.white} />
-              <RText style={styles.addToCartText}>أضف للسلة</RText>
-            </TouchableOpacity>
+            <View style={styles.reelsCartSheet}>
+              <RText style={styles.detailsStoreName}>{reel?.title || '-'}</RText>
+              <View style={styles.qtyRow}>
+                <RText style={styles.sheetPrice}>{currentProduct ? formatSyp((currentProduct.priceValue || 0) * quantity) : '-'}</RText>
+                <View style={styles.qtyControls}>
+                  <TouchableOpacity style={styles.qtyButton} onPress={() => setQuantity((current) => Math.max(1, current - 1))}>
+                    <AppIcon icon={Icons.Minus} size={14} color={palette.muted} />
+                  </TouchableOpacity>
+                  <RText style={styles.qtyValue}>{quantity}</RText>
+                  <TouchableOpacity style={styles.qtyButton} onPress={() => setQuantity((current) => current + 1)}>
+                    <AppIcon icon={Icons.Plus} size={14} color={palette.muted} />
+                  </TouchableOpacity>
+                  <RText style={styles.qtyLabel}>العناصر المختارة</RText>
+                </View>
+              </View>
+              {currentProduct ? (
+                <TouchableOpacity style={styles.addToCartButton} onPress={() => onAddToCart(currentProduct, quantity)}>
+                  <AppIcon icon={Icons.ShoppingCart} size={22} color={palette.white} />
+                  <RText style={styles.addToCartText}>أضف للسلة</RText>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
+        </ImageBackground>
+      ) : (
+        <View style={[styles.reelsBackground, { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.greenSoft }]}>
+          <AppIcon icon={Icons.Video} size={42} color={palette.green} />
         </View>
-      </ImageBackground>
+      )}
     </View>
   );
 }
 
 function AuthField({ label, placeholder, icon, secure = false, leadingIcon, value, onChangeText }) {
+  const [visible, setVisible] = useState(false);
+  const secureEntry = secure && !visible;
+  const LeadingIcon = secure ? (visible ? Icons.Eye : Icons.EyeOff) : leadingIcon;
+
   return (
     <View style={styles.authFieldBlock}>
       <RText style={styles.authLabel}>{label}</RText>
       <View style={styles.authInputShell}>
-        {leadingIcon ? <AppIcon icon={leadingIcon} size={19} color={palette.green} /> : null}
+        {LeadingIcon ? (
+          <TouchableOpacity
+            disabled={!secure}
+            onPress={() => setVisible((current) => !current)}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
+            <AppIcon icon={LeadingIcon} size={19} color={palette.green} />
+          </TouchableOpacity>
+        ) : null}
         <TextInput
           style={styles.authInput}
           placeholder={placeholder}
           placeholderTextColor="#A2ABB4"
-          secureTextEntry={secure}
+          secureTextEntry={secureEntry}
           textAlign="right"
           value={value}
           onChangeText={onChangeText}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
         <AppIcon icon={icon} size={20} color={palette.amber} />
       </View>
@@ -905,7 +760,6 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
     firstName: 'سارة',
     lastName: 'خان',
     phone: '0999000002',
-    email: 'customer@khan.local',
     password: 'Password123!',
   });
   const login = mode === 'login';
@@ -949,7 +803,7 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
       ) : null}
       {login ? (
         <>
-          <AuthField label="البريد الإلكتروني" value={form.email} onChangeText={update('email')} placeholder="البريد الإلكتروني" icon={Icons.Mail} />
+          <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
           <AuthField label="كلمة المرور" value={form.password} onChangeText={update('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
           <View style={styles.authInline}>
             <TouchableOpacity>
@@ -960,7 +814,7 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
               <RText style={styles.tinyMuted}>تذكرني</RText>
             </View>
           </View>
-          <TouchableOpacity style={styles.authPrimary} onPress={() => onLogin?.({ email: form.email, password: form.password })}>
+          <TouchableOpacity style={styles.authPrimary} onPress={() => onLogin?.({ phone: form.phone, password: form.password })}>
             <RText style={styles.authPrimaryText}>{authLoading ? 'جاري الدخول...' : 'تسجيل الدخول'}</RText>
           </TouchableOpacity>
           <RText style={styles.authQuestion}>لم تقم بالاشتراك معنا؟</RText>
@@ -975,7 +829,6 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
             <AuthField label="اسم العائلة" value={form.lastName} onChangeText={update('lastName')} placeholder="اسم العائلة" icon={Icons.User} />
           </View>
           <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
-          <AuthField label="البريد الإلكتروني" value={form.email} onChangeText={update('email')} placeholder="البريد الإلكتروني" icon={Icons.Mail} />
           <AuthField label="كلمة المرور" value={form.password} onChangeText={update('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
           <View style={styles.termsRow}>
             <View style={styles.checkbox} />
@@ -987,7 +840,6 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
               firstName: form.firstName,
               lastName: form.lastName,
               phone: form.phone,
-              email: form.email,
               password: form.password,
               role: 'CUSTOMER',
             })}

@@ -344,8 +344,9 @@ export const styles = StyleSheet.create({
     marginTop: 12,
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 14,
+    justifyContent: 'flex-start',
+    columnGap: 5,
+    rowGap: 5,
   },
   collectionContent: {
     paddingHorizontal: 16,

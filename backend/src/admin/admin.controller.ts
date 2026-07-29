@@ -15,10 +15,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { AdminService } from './admin.service';
 import {
+  AssignStorePackageDto,
+  CreateStorePackageDto,
   ConfirmPaymentDto,
+  CreateAdminStoreDto,
+  CreateCategoryDto,
   CreateDeliveryEventDto,
   UpdateOrderStatusDto,
   UpdateStoreStatusDto,
+  UpdateStorePackageDto,
   UpdateUserStatusDto,
 } from './dto';
 
@@ -31,6 +36,40 @@ export class AdminController {
   @Get('stores')
   stores() {
     return this.admin.stores();
+  }
+
+  @Get('packages')
+  packages() {
+    return this.admin.packages();
+  }
+
+  @Post('packages')
+  @Roles(UserRole.ADMIN)
+  createPackage(@Body() dto: CreateStorePackageDto) {
+    return this.admin.createPackage(dto);
+  }
+
+  @Patch('packages/:id')
+  @Roles(UserRole.ADMIN)
+  updatePackage(@Param('id') id: string, @Body() dto: UpdateStorePackageDto) {
+    return this.admin.updatePackage(id, dto);
+  }
+
+  @Post('stores')
+  @Roles(UserRole.ADMIN)
+  createStore(@Body() dto: CreateAdminStoreDto) {
+    return this.admin.createStore(dto);
+  }
+
+  @Post('stores/:id/subscription')
+  @Roles(UserRole.ADMIN)
+  assignStorePackage(@Param('id') id: string, @Body() dto: AssignStorePackageDto) {
+    return this.admin.assignStorePackage(id, dto.packageId);
+  }
+
+  @Post('categories')
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.admin.createCategory(dto);
   }
 
   @Patch('stores/:id/status')

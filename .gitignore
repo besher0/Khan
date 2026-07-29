@@ -16,5 +16,9 @@ npm-debug.log*
 .env
 .env.local
 
+# Local development database
+backend/.local-postgres/
+backend/.local-postgres-log/
+
 # Local Codex preview files
 .codex-preview/

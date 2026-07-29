@@ -102,7 +102,6 @@ export class CatalogService {
     const store = await this.prisma.store.findFirst({
       where: { id, status: StoreStatus.APPROVED },
       include: {
-        category: true,
         coupons: { where: { status: CouponStatus.ACTIVE }, take: 10 },
         reviews: {
           where: { status: ReviewStatus.APPROVED },
@@ -132,7 +131,6 @@ export class CatalogService {
             { description: { contains: q, mode: 'insensitive' } },
           ],
         },
-        include: { category: true },
         take: query.take,
         skip: query.skip,
         orderBy: { createdAt: 'desc' },

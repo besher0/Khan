@@ -22,10 +22,6 @@ export class UpsertStoreDto {
 
   @IsOptional()
   @IsString()
-  categoryId?: string;
-
-  @IsOptional()
-  @IsString()
   description?: string;
 
   @IsOptional()
@@ -49,10 +45,6 @@ export class UpdateStoreDto {
   @IsOptional()
   @IsString()
   name?: string;
-
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
 
   @IsOptional()
   @IsString()
