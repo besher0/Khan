@@ -28,7 +28,7 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwt.verifyAsync<{ sub: string }>(token, {
-        secret: this.config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-access-secret',
+        secret: this.getRequiredConfig('JWT_ACCESS_SECRET'),
       });
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -50,5 +50,13 @@ export class JwtAuthGuard implements CanActivate {
     if (!header) return null;
     const [type, token] = header.split(' ');
     return type === 'Bearer' ? token : null;
+  }
+
+  private getRequiredConfig(key: string) {
+    const value = this.config.get<string>(key);
+    if (!value) {
+      throw new Error(`Missing required config: ${key}`);
+    }
+    return value;
   }
 }

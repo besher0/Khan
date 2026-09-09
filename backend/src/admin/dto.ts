@@ -135,6 +135,16 @@ export class CreateCategoryDto {
   imageUrl?: string;
 }
 
+export class UpdateCategoryDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+}
+
 export class UpdateStoreStatusDto {
   @IsEnum(StoreStatus)
   status: StoreStatus;

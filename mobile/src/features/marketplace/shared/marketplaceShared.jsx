@@ -2,6 +2,7 @@ import React from 'react';
 import { Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as Icons from '../../../../icons';
 import googleImage from '../../../../assets/google.jpg';
+import storeBannerImage from '../../../../assets/store-banner.jpg';
 import { API_ORIGIN } from '../../../services/api';
 import { styles } from '../theme/styles';
 
@@ -21,6 +22,7 @@ export const palette = {
 
 export const images = {
   google: googleImage,
+  storeBanner: storeBannerImage,
 };
 
 const couponColors = [palette.green, palette.amber, palette.greenDark, palette.danger];
@@ -252,10 +254,10 @@ export function CouponCard({ coupon, index, style }) {
 }
 
 export function RatingPill({ rating = 0 }) {
-  if (!Number(rating)) return null;
+  const value = Number(rating) || 0;
   return (
     <View style={styles.ratingPill}>
-      <RText style={styles.ratingText}>{Number(rating || 0).toFixed(1)}</RText>
+      <RText style={styles.ratingText}>{value.toFixed(1)}</RText>
       <AppIcon icon={Icons.Star} size={11} color={palette.amber} strokeWidth={2.8} />
     </View>
   );
@@ -269,13 +271,14 @@ export function ProductCard({
   onAddToCart,
   onToggleFavorite,
   isFavorite = false,
+  showcase = false,
 }) {
   return (
     <TouchableOpacity
-      style={[styles.productCard, compact && styles.productCardCompact, style]}
+      style={[styles.productCard, compact && styles.productCardCompact, showcase && styles.productCardShowcase, style]}
       onPress={() => onOpen?.(product)}
     >
-      <View style={styles.productImageBox}>
+      <View style={[styles.productImageBox, showcase && styles.productImageBoxShowcase]}>
         {product.image ? (
           <Image source={product.image} style={styles.productImage} />
         ) : (
@@ -291,16 +294,17 @@ export function ProductCard({
             strokeWidth={isFavorite ? 3 : 2}
           />
         </TouchableOpacity>
-        <View style={styles.productBadges}>
+        <View style={[styles.productBadges, showcase && styles.productBadgesShowcase]}>
           <RatingPill rating={product.rating} />
-          {product.freeDelivery ? (
+          {product.freeDelivery || showcase ? (
             <View style={styles.deliveryPill}>
+              <AppIcon icon={Icons.Truck} size={10} color={palette.white} />
               <RText style={styles.deliveryText}>توصيل مجاني</RText>
             </View>
           ) : null}
         </View>
       </View>
-      <RText numberOfLines={2} style={styles.productTitle}>
+      <RText numberOfLines={2} style={[styles.productTitle, showcase && styles.productTitleShowcase]}>
         {product.title}
       </RText>
       <View style={styles.storeLine}>
@@ -309,8 +313,8 @@ export function ProductCard({
           {product.store}
         </RText>
       </View>
-      <RText style={styles.productPrice}>{product.price}</RText>
-      <TouchableOpacity style={styles.productCart} onPress={() => onAddToCart?.(product)}>
+      <RText style={[styles.productPrice, showcase && styles.productPriceShowcase]}>{product.price}</RText>
+      <TouchableOpacity style={[styles.productCart, showcase && styles.productCartShowcase]} onPress={() => onAddToCart?.(product)}>
         <AppIcon icon={Icons.ShoppingCart} size={16} color={palette.green} />
       </TouchableOpacity>
     </TouchableOpacity>

@@ -6,6 +6,7 @@ const fallbackBaseUrl = Platform.select({
 });
 
 const runtimeEnv = typeof process !== 'undefined' && process.env ? process.env : {};
+const demoAuthEnabled = runtimeEnv.EXPO_PUBLIC_ENABLE_DEMO_AUTH === 'true';
 
 export const API_BASE_URL = runtimeEnv.EXPO_PUBLIC_API_URL || runtimeEnv.VITE_API_URL || fallbackBaseUrl;
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
@@ -121,6 +122,22 @@ async function loginAs(area, credentials) {
   return session;
 }
 
+function getDemoCredentials(area) {
+  if (!demoAuthEnabled) {
+    throw new Error('Demo auth is disabled');
+  }
+
+  const prefix = area === 'admin' ? 'ADMIN' : 'MERCHANT';
+  const phone = runtimeEnv[`EXPO_PUBLIC_DEMO_${prefix}_PHONE`];
+  const password = runtimeEnv[`EXPO_PUBLIC_DEMO_${prefix}_PASSWORD`];
+
+  if (!phone || !password) {
+    throw new Error(`Missing demo ${area} credentials`);
+  }
+
+  return { phone, password };
+}
+
 export const authApi = {
   getSession: readSession,
   setSession: writeSession,
@@ -141,10 +158,10 @@ export const authApi = {
   },
   ensureMerchantSession: () =>
     readSession('merchant') ||
-    loginAs('merchant', { phone: '0999000001', password: 'Password123!' }),
+    loginAs('merchant', getDemoCredentials('merchant')),
   ensureAdminSession: () =>
     readSession('admin') ||
-    loginAs('admin', { phone: '0990000001', password: 'Password123!' }),
+    loginAs('admin', getDemoCredentials('admin')),
 };
 
 export const uploadsApi = {
@@ -207,14 +224,14 @@ export const merchantApi = {
   createProduct: (payload) => post('/merchant/products', payload, { authArea: 'merchant' }),
   updateProduct: (id, payload) => patch(`/merchant/products/${id}`, payload, { authArea: 'merchant' }),
   archiveProduct: (id) => del(`/merchant/products/${id}`, { authArea: 'merchant' }),
-  orders: () => apiFetch('/merchant/orders', { authArea: 'merchant' }),
+  orders: (query = {}) => apiFetch(`/merchant/orders${makeQuery(query)}`, { authArea: 'merchant' }),
   coupons: () => apiFetch('/merchant/coupons', { authArea: 'merchant' }),
   createCoupon: (payload) => post('/merchant/coupons', payload, { authArea: 'merchant' }),
   updateCoupon: (id, payload) => patch(`/merchant/coupons/${id}`, payload, { authArea: 'merchant' }),
   reels: () => apiFetch('/merchant/reels', { authArea: 'merchant' }),
   createReel: (payload) => post('/merchant/reels', payload, { authArea: 'merchant' }),
   updateReel: (id, payload) => patch(`/merchant/reels/${id}`, payload, { authArea: 'merchant' }),
-  wallet: () => apiFetch('/merchant/wallet', { authArea: 'merchant' }),
+  wallet: (query = {}) => apiFetch(`/merchant/wallet${makeQuery(query)}`, { authArea: 'merchant' }),
 };
 
 export const adminApi = {
@@ -222,22 +239,24 @@ export const adminApi = {
   packages: () => apiFetch('/admin/packages', { authArea: 'admin' }),
   createPackage: (payload) => post('/admin/packages', payload, { authArea: 'admin' }),
   updatePackage: (id, payload) => patch(`/admin/packages/${id}`, payload, { authArea: 'admin' }),
+  products: () => apiFetch('/admin/products', { authArea: 'admin' }),
   stores: () => apiFetch('/admin/stores', { authArea: 'admin' }),
   createStore: (payload) => post('/admin/stores', payload, { authArea: 'admin' }),
   assignStorePackage: (id, packageId) =>
     post(`/admin/stores/${id}/subscription`, { packageId }, { authArea: 'admin' }),
   updateStoreStatus: (id, status) => patch(`/admin/stores/${id}/status`, { status }, { authArea: 'admin' }),
-  orders: () => apiFetch('/admin/orders', { authArea: 'admin' }),
+  orders: (query = {}) => apiFetch(`/admin/orders${makeQuery(query)}`, { authArea: 'admin' }),
   updateOrderStatus: (id, payload) => patch(`/admin/orders/${id}/status`, payload, { authArea: 'admin' }),
-  payments: () => apiFetch('/admin/payments', { authArea: 'admin' }),
+  payments: (query = {}) => apiFetch(`/admin/payments${makeQuery(query)}`, { authArea: 'admin' }),
   confirmPayment: (id, payload) => patch(`/admin/payments/${id}/confirm`, payload, { authArea: 'admin' }),
   deliveryEvents: () => apiFetch('/admin/delivery-events', { authArea: 'admin' }),
   createDeliveryEvent: (payload) => post('/admin/delivery-events', payload, { authArea: 'admin' }),
-  users: () => apiFetch('/admin/users', { authArea: 'admin' }),
+  users: (query = {}) => apiFetch(`/admin/users${makeQuery(query)}`, { authArea: 'admin' }),
   updateUserStatus: (id, status) => patch(`/admin/users/${id}/status`, { status }, { authArea: 'admin' }),
   reviews: () => apiFetch('/admin/reviews', { authArea: 'admin' }),
   approveReview: (id) => patch(`/admin/reviews/${id}/approve`, {}, { authArea: 'admin' }),
   rejectReview: (id) => patch(`/admin/reviews/${id}/reject`, {}, { authArea: 'admin' }),
+  updateCategory: (id, payload) => patch(`/admin/categories/${id}`, payload, { authArea: 'admin' }),
 };
 
 export const marketplaceApi = catalogApi;

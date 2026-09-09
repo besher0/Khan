@@ -11,6 +11,7 @@ import {
   WalletTransactionStatus,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { slugify } from '../common/utils/slugify';
 import {
@@ -21,9 +22,10 @@ import {
   CreateDeliveryEventDto,
   UpdateOrderStatusDto,
   UpdateStorePackageDto,
+  UpdateCategoryDto,
 } from './dto';
 
-const safeOwnerSelect = {
+const safeUserSelect = {
   id: true,
   email: true,
   phone: true,
@@ -41,7 +43,7 @@ export class AdminService {
   stores() {
     return this.prisma.store.findMany({
       include: {
-        owner: { select: safeOwnerSelect },
+        owner: { select: safeUserSelect },
         subscriptions: {
           where: { status: SubscriptionStatus.ACTIVE },
           include: { package: true },
@@ -56,6 +58,17 @@ export class AdminService {
   packages() {
     return this.prisma.storePackage.findMany({
       orderBy: [{ isActive: 'desc' }, { price: 'asc' }],
+    });
+  }
+
+  products() {
+    return this.prisma.product.findMany({
+      include: {
+        store: true,
+        category: true,
+        images: { orderBy: { position: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -130,7 +143,7 @@ export class AdminService {
           },
         },
         include: {
-          owner: { select: safeOwnerSelect },
+          owner: { select: safeUserSelect },
           subscriptions: { include: { package: true } },
         },
       });
@@ -169,6 +182,19 @@ export class AdminService {
     });
   }
 
+  async updateCategory(id: string, dto: UpdateCategoryDto) {
+    const existing = await this.prisma.category.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Category not found');
+
+    return this.prisma.category.update({
+      where: { id },
+      data: {
+        name: dto.name?.trim(),
+        imageUrl: dto.imageUrl?.trim(),
+      },
+    });
+  }
+
   updateStoreStatus(id: string, status: StoreStatus) {
     return this.prisma.store.update({
       where: { id },
@@ -176,11 +202,48 @@ export class AdminService {
     });
   }
 
-  orders() {
-    return this.prisma.order.findMany({
-      include: { user: true, store: true, items: true, payment: true, deliveryEvents: true },
-      orderBy: { createdAt: 'desc' },
-    });
+  async orders(query: PageQueryDto) {
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = {};
+
+    const [items, total, totalSales, statusCounts] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        include: { user: { select: safeUserSelect }, store: true, items: true, payment: true, deliveryEvents: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+      this.prisma.order.aggregate({
+        where,
+        _sum: { total: true },
+      }),
+      this.prisma.order.groupBy({
+        by: ['status'],
+        where,
+        orderBy: { status: 'asc' },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      summary: {
+        totalOrders: total,
+        totalSales: totalSales._sum.total ?? 0,
+        statusCounts: statusCounts.reduce(
+          (counts, item) => ({ ...counts, [item.status]: item._count }),
+          {} as Partial<Record<OrderStatus, number>>,
+        ),
+      },
+    };
   }
 
   async updateOrderStatus(actorId: string, orderId: string, dto: UpdateOrderStatusDto) {
@@ -233,11 +296,42 @@ export class AdminService {
     });
   }
 
-  payments() {
-    return this.prisma.payment.findMany({
-      include: { order: { include: { store: true, user: true } } },
-      orderBy: { createdAt: 'desc' },
-    });
+  async payments(query: PageQueryDto) {
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = {};
+
+    const [items, total, statusCounts] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where,
+        include: { order: { include: { store: true, user: { select: safeUserSelect } } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.payment.count({ where }),
+      this.prisma.payment.groupBy({
+        by: ['status'],
+        where,
+        orderBy: { status: 'asc' },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      summary: {
+        statusCounts: statusCounts.reduce(
+          (counts, item) => ({ ...counts, [item.status]: item._count }),
+          {} as Partial<Record<PaymentStatus, number>>,
+        ),
+      },
+    };
   }
 
   async confirmPayment(id: string, dto: ConfirmPaymentDto) {
@@ -263,7 +357,7 @@ export class AdminService {
 
   deliveryEvents() {
     return this.prisma.deliveryEvent.findMany({
-      include: { order: true, createdBy: true },
+      include: { order: true, createdBy: { select: safeUserSelect } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -275,20 +369,38 @@ export class AdminService {
     });
   }
 
-  users() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        phone: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+  async users(query: PageQueryDto) {
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   updateUserStatus(id: string, status: UserStatus) {
@@ -298,11 +410,29 @@ export class AdminService {
     });
   }
 
-  reviews() {
-    return this.prisma.review.findMany({
-      include: { user: true, store: true, product: true, order: true },
-      orderBy: { createdAt: 'desc' },
-    });
+  async reviews(query: PageQueryDto) {
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = {};
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.review.findMany({
+        where,
+        include: { user: { select: safeUserSelect }, store: true, product: true, order: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.review.count({ where }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   reviewStatus(id: string, status: keyof typeof ReviewStatus) {

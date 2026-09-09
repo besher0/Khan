@@ -8,11 +8,18 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+  const allowedOrigins = getAllowedCorsOrigins(config);
 
   app.setGlobalPrefix('api/v1');
   app.use('/uploads', serveStatic(join(process.cwd(), 'uploads')));
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   });
   app.useGlobalPipes(
@@ -28,3 +35,24 @@ async function bootstrap() {
 }
 
 void bootstrap();
+
+function getAllowedCorsOrigins(config: ConfigService) {
+  const configured = (config.get<string>('CORS_ORIGINS') ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (config.get<string>('NODE_ENV') !== 'production') {
+    return [
+      ...configured,
+      'http://localhost:3000',
+      'http://localhost:4000',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:4000',
+      'http://127.0.0.1:5173',
+    ];
+  }
+
+  return configured;
+}

@@ -35,7 +35,7 @@ export class PaymentsController {
     @Body() dto: ShamCashCallbackDto,
   ) {
     const expected = this.config.get<string>('SHAM_CASH_CALLBACK_SECRET');
-    if (expected && secret !== expected) {
+    if (!expected || secret !== expected) {
       throw new UnauthorizedException('Invalid callback secret');
     }
 

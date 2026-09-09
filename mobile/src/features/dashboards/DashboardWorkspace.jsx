@@ -52,14 +52,14 @@ const navItems = [
 const emptyRemoteData = {
   stores: [],
   packages: [],
-  orders: [],
+  orders: { items: [], page: 1, limit: 20, total: 0, totalPages: 1, summary: { totalOrders: 0, totalSales: 0, statusCounts: {} } },
   products: [],
   categories: [],
   coupons: [],
   reels: [],
-  payments: [],
-  users: [],
-  reviews: [],
+  payments: { items: [], page: 1, limit: 20, total: 0, totalPages: 1, summary: { statusCounts: {} } },
+  users: { items: [], page: 1, limit: 20, total: 0, totalPages: 1 },
+  reviews: { items: [], page: 1, limit: 20, total: 0, totalPages: 1 },
   deliveryEvents: [],
   wallet: null,
 };
@@ -390,6 +390,39 @@ function UploadField({ label, value, onChange, onError, accept = 'image/*', area
   );
 }
 
+function CategoryImageButton({ category, onUpdateImage, disabled }) {
+  const [uploading, setUploading] = useState(false);
+
+  const chooseFile = () => {
+    if (typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setUploading(true);
+      try {
+        const uploaded = await uploadsApi.file(file, 'admin');
+        await onUpdateImage(category.id, uploaded.url);
+      } finally {
+        setUploading(false);
+      }
+    };
+    input.click();
+  };
+
+  return (
+    <TouchableOpacity
+      style={[styles.smallActionButton, (uploading || disabled) && styles.buttonDisabled]}
+      onPress={chooseFile}
+      disabled={uploading || disabled}
+    >
+      <Text style={styles.smallActionText}>{uploading ? 'جاري الرفع...' : 'تغيير الصورة'}</Text>
+    </TouchableOpacity>
+  );
+}
+
 const createTitles = {
   store: 'إضافة متجر جديد',
   subscription: 'تغيير باقة المتجر',
@@ -423,6 +456,7 @@ function CreateEntityModal({ type, data, saving, onClose, onSubmit, initialData 
   if (!type) return null;
 
   const setValue = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
+  const title = initialData && type === 'category' ? 'تعديل القسم' : createTitles[type];
 
   const submit = async () => {
     setFormError('');
@@ -514,7 +548,7 @@ function CreateEntityModal({ type, data, saving, onClose, onSubmit, initialData 
             <TouchableOpacity style={styles.modalClose} onPress={onClose} disabled={saving}>
               <Icon glyph={Icons.X} color={palette.ink} size={22} />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>{createTitles[type]}</Text>
+            <Text style={styles.modalTitle}>{title}</Text>
           </View>
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
             {type === 'store' ? (
@@ -645,13 +679,14 @@ function CreateEntityModal({ type, data, saving, onClose, onSubmit, initialData 
 }
 
 function OverviewView({ data }) {
-  const totalSales = data.orders.reduce((sum, order) => sum + (Number(order.total) || 0), 0);
+  const orders = data.orders.items || [];
+  const orderSummary = data.orders.summary || {};
   return (
     <>
       <View style={styles.statsGrid}>
-        <StatCard label="مبيعات" value={formatNumber(totalSales)} hint="الإجمالي" delta="0" icon={Icons.Banknote} />
+        <StatCard label="مبيعات" value={formatNumber(orderSummary.totalSales)} hint="الإجمالي" delta="0" icon={Icons.Banknote} />
         <StatCard label="زائر" value="0" hint="غير متوفر من API" delta="0" icon={Icons.Users} />
-        <StatCard label="طلب" value={String(data.orders.length)} hint="الإجمالي" delta="0" icon={Icons.Package} />
+        <StatCard label="طلب" value={String(orderSummary.totalOrders || data.orders.total || 0)} hint="الإجمالي" delta="0" icon={Icons.Package} />
         <StatCard label="منتج" value={String(data.products.length)} hint="الإجمالي" delta="0" icon={Icons.ShoppingBag} />
       </View>
       <View style={styles.overviewGrid}>
@@ -660,7 +695,7 @@ function OverviewView({ data }) {
             <TouchableOpacity><Text style={styles.linkText}>عرض الكل</Text></TouchableOpacity>
             <Text style={styles.panelTitle}>أحدث الطلبات</Text>
           </View>
-          {data.orders.length ? data.orders.slice(0, 4).map((order, index) => (
+          {orders.length ? orders.slice(0, 4).map((order, index) => (
             <View key={order.id || index} style={styles.miniOrderRow}>
               <View>
                 <Text style={styles.moneySmall}>{formatSyp(order.total)}</Text>
@@ -758,14 +793,40 @@ function StoresView({ data, onAdd, onAssignPackage, onChangeStatus }) {
   );
 }
 
-function OrdersView({ data, canManage, onStatusChange, actionBusy }) {
+function PaginationControls({ pageData, onPageChange }) {
+  const page = pageData?.page || 1;
+  const totalPages = pageData?.totalPages || 1;
+  return (
+    <View style={styles.authInline}>
+      <TouchableOpacity
+        style={[styles.smallActionButton, page <= 1 && styles.buttonDisabled]}
+        onPress={() => onPageChange(page - 1)}
+        disabled={page <= 1}
+      >
+        <Text style={styles.smallActionText}>السابق</Text>
+      </TouchableOpacity>
+      <Text style={styles.mutedSmall}>{page} / {totalPages}</Text>
+      <TouchableOpacity
+        style={[styles.smallActionButton, page >= totalPages && styles.buttonDisabled]}
+        onPress={() => onPageChange(page + 1)}
+        disabled={page >= totalPages}
+      >
+        <Text style={styles.smallActionText}>التالي</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function OrdersView({ data, canManage, onStatusChange, actionBusy, onPageChange }) {
+  const orders = data.orders.items || [];
+  const statusCounts = data.orders.summary?.statusCounts || {};
   return (
     <>
       <View style={styles.statsGrid}>
-        <StatCard label="جديد" value={String(data.orders.filter((o) => o.status === 'PENDING').length)} hint="الإجمالي" delta="0" icon={Icons.Package} />
-        <StatCard label="قيد التحضير" value={String(data.orders.filter((o) => o.status === 'PREPARING').length)} hint="الإجمالي" delta="0" icon={Icons.Clock3} tone="purple" />
-        <StatCard label="قيد التوصيل" value={String(data.orders.filter((o) => o.status === 'OUT_FOR_DELIVERY').length)} hint="الإجمالي" delta="0" icon={Icons.Truck} tone="amber" />
-        <StatCard label="مكتمل" value={String(data.orders.filter((o) => o.status === 'DELIVERED').length)} hint="الإجمالي" delta="0" icon={Icons.CircleCheck} tone="red" />
+        <StatCard label="جديد" value={String(statusCounts.PENDING || 0)} hint="الإجمالي" delta="0" icon={Icons.Package} />
+        <StatCard label="قيد التحضير" value={String(statusCounts.PREPARING || 0)} hint="الإجمالي" delta="0" icon={Icons.Clock3} tone="purple" />
+        <StatCard label="قيد التوصيل" value={String(statusCounts.OUT_FOR_DELIVERY || 0)} hint="الإجمالي" delta="0" icon={Icons.Truck} tone="amber" />
+        <StatCard label="مكتمل" value={String(statusCounts.DELIVERED || 0)} hint="الإجمالي" delta="0" icon={Icons.CircleCheck} tone="red" />
       </View>
       <HeaderTabs
         active="all"
@@ -780,7 +841,7 @@ function OrdersView({ data, canManage, onStatusChange, actionBusy }) {
         ]}
       />
       <View style={styles.tableCard}>
-        {data.orders.length ? data.orders.map((order, index) => (
+        {orders.length ? orders.map((order, index) => (
           <View key={order.id || index} style={styles.orderRow}>
             <View style={styles.rowActionsWide}>
               {canManage ? (
@@ -817,6 +878,7 @@ function OrdersView({ data, canManage, onStatusChange, actionBusy }) {
           </View>
         )) : <EmptyState />}
       </View>
+      <PaginationControls pageData={data.orders} onPageChange={onPageChange} />
     </>
   );
 }
@@ -881,7 +943,7 @@ function ProductsView({ data, canManage, onAdd, onArchive, actionBusy }) {
   );
 }
 
-function CategoriesView({ data, canManage, onAdd }) {
+function CategoriesView({ data, canManage, onAdd, onEdit, onUpdateImage, actionBusy }) {
   return (
     <>
       <HeaderTabs active="all" onChange={() => {}} tabs={[{ key: 'all', label: `كل الأقسام ${data.categories.length}` }]} />
@@ -897,6 +959,18 @@ function CategoriesView({ data, canManage, onAdd }) {
               <Text style={styles.entityName}>{category.name}</Text>
             </View>
             <Text style={styles.tableCell}>{formatDate(category.createdAt)}</Text>
+            {canManage ? (
+              <View style={styles.rowActionsWide}>
+                <TouchableOpacity style={styles.smallActionButton} onPress={() => onEdit(category)}>
+                  <Text style={styles.smallActionText}>تعديل</Text>
+                </TouchableOpacity>
+                <CategoryImageButton
+                  category={category}
+                  onUpdateImage={onUpdateImage}
+                  disabled={actionBusy === `category-${category.id}`}
+                />
+              </View>
+            ) : null}
           </View>
         )) : <EmptyState label="لا توجد أقسام بعد" />}
       </View>
@@ -1015,108 +1089,120 @@ function PackagesView({ data, onAdd, onEdit, onToggle, actionBusy }) {
   );
 }
 
-function CustomersView({ data, currentUserId, onUserStatus, onReviewStatus, actionBusy }) {
+function CustomersView({ data, currentUserId, onUserStatus, onReviewStatus, actionBusy, onUsersPageChange, onReviewsPageChange }) {
   const [tab, setTab] = useState('customers');
-  const users = data.users;
-  const reviews = data.reviews;
+  const users = data.users.items || [];
+  const reviews = data.reviews.items || [];
   return (
     <>
-      <HeaderTabs active={tab} onChange={setTab} tabs={[{ key: 'customers', label: 'العملاء' }, { key: 'reviews', label: 'التقييمات' }]} />
+      <HeaderTabs active={tab} onChange={setTab} tabs={[{ key: 'customers', label: `العملاء ${data.users.total || 0}` }, { key: 'reviews', label: `التقييمات ${data.reviews.total || 0}` }]} />
       {tab === 'customers' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableHorizontalScroll}>
-          <View style={[styles.tableCard, styles.customerTable]}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, styles.customerNameColumn]}>المستخدم</Text>
-              <Text style={[styles.tableHeaderText, styles.customerRoleColumn]}>الدور</Text>
-              <Text style={[styles.tableHeaderText, styles.customerPhoneColumn]}>الهاتف</Text>
-              <Text style={[styles.tableHeaderText, styles.customerStatusColumn]}>الحالة</Text>
-              <Text style={[styles.tableHeaderText, styles.customerActionColumn]}>الإجراءات</Text>
-            </View>
-            {users.length ? users.map((user, index) => (
-              <View key={`${user.id}-${index}`} style={styles.customerRow}>
-              <View style={styles.customerNameColumn}>
-                <View style={styles.customerEntity}>
-                <View style={styles.grayAvatar} />
-                <Text style={styles.entityName}>{displayName(user)}</Text>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableHorizontalScroll}>
+            <View style={[styles.tableCard, styles.customerTable]}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderText, styles.customerNameColumn]}>المستخدم</Text>
+                <Text style={[styles.tableHeaderText, styles.customerRoleColumn]}>الدور</Text>
+                <Text style={[styles.tableHeaderText, styles.customerPhoneColumn]}>الهاتف</Text>
+                <Text style={[styles.tableHeaderText, styles.customerStatusColumn]}>الحالة</Text>
+                <Text style={[styles.tableHeaderText, styles.customerActionColumn]}>الإجراءات</Text>
                 </View>
-              </View>
-              <Text style={[styles.tableCell, styles.customerRoleColumn]}>{roleLabel(user.role)}</Text>
-              <Text style={[styles.tableCell, styles.customerPhoneColumn]}>{user.phone || '-'}</Text>
-              <View style={styles.customerStatusColumn}><StatusPill status={user.status || 'ACTIVE'} /></View>
-              <View style={styles.customerActionColumn}>
-                <SwitchControl
-                  active={user.status === 'ACTIVE'}
-                  onPress={() => onUserStatus(user.id, user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE')}
-                  disabled={user.id === currentUserId || actionBusy === `user-${user.id}`}
-                />
-              </View>
+              {users.length ? users.map((user, index) => (
+                <View key={`${user.id}-${index}`} style={styles.customerRow}>
+                  <View style={styles.customerNameColumn}>
+                    <View style={styles.customerEntity}>
+                      <View style={styles.grayAvatar} />
+                      <Text style={styles.entityName}>{displayName(user)}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.tableCell, styles.customerRoleColumn]}>{roleLabel(user.role)}</Text>
+                  <Text style={[styles.tableCell, styles.customerPhoneColumn]}>{user.phone || '-'}</Text>
+                  <View style={styles.customerStatusColumn}><StatusPill status={user.status || 'ACTIVE'} /></View>
+                  <View style={styles.customerActionColumn}>
+                    <SwitchControl
+                      active={user.status === 'ACTIVE'}
+                      onPress={() => onUserStatus(user.id, user.status === 'ACTIVE' ? 'BLOCKED' : 'ACTIVE')}
+                      disabled={user.id === currentUserId || actionBusy === `user-${user.id}`}
+                    />
+                  </View>
+                </View>
+              )) : <EmptyState />}
             </View>
-            )) : <EmptyState />}
-          </View>
-        </ScrollView>
+          </ScrollView>
+          <PaginationControls pageData={data.users} onPageChange={onUsersPageChange} />
+        </>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableHorizontalScroll}>
-          <View style={[styles.tableCard, styles.reviewTable]}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableHeaderText, styles.reviewProductColumn]}>المنتج</Text>
-              <Text style={[styles.tableHeaderText, styles.reviewUserColumn]}>المستخدم</Text>
-              <Text style={[styles.tableHeaderText, styles.reviewDateColumn]}>التاريخ</Text>
-              <Text style={[styles.tableHeaderText, styles.reviewRatingColumn]}>التقييم</Text>
-              <Text style={[styles.tableHeaderText, styles.reviewCommentColumn]}>التعليق</Text>
-              <Text style={[styles.tableHeaderText, styles.reviewActionColumn]}>الإجراءات</Text>
-            </View>
-            {reviews.length ? reviews.map((review, index) => (
-              <View key={`${review.id}-${index}`} style={styles.reviewRow}>
-              <View style={styles.reviewProductColumn}>
-                <View style={styles.customerEntity}>
-                  <ProductThumb source={remoteImage(review.product?.images?.[0]?.url)} size={48} />
-                  <Text style={styles.entityName}>{review.product?.name || 'المنتج'}</Text>
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableHorizontalScroll}>
+            <View style={[styles.tableCard, styles.reviewTable]}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderText, styles.reviewProductColumn]}>المنتج</Text>
+                <Text style={[styles.tableHeaderText, styles.reviewUserColumn]}>المستخدم</Text>
+                <Text style={[styles.tableHeaderText, styles.reviewDateColumn]}>التاريخ</Text>
+                <Text style={[styles.tableHeaderText, styles.reviewRatingColumn]}>التقييم</Text>
+                <Text style={[styles.tableHeaderText, styles.reviewCommentColumn]}>التعليق</Text>
+                <Text style={[styles.tableHeaderText, styles.reviewActionColumn]}>الإجراءات</Text>
                 </View>
-              </View>
-              <View style={styles.reviewUserColumn}>
-                <View style={styles.customerEntity}>
-                  <View style={styles.grayAvatarSmall} />
-                  <Text style={styles.entityName}>{displayName(review.user)}</Text>
+              {reviews.length ? reviews.map((review, index) => (
+                <View key={`${review.id}-${index}`} style={styles.reviewRow}>
+                  <View style={styles.reviewProductColumn}>
+                    <View style={styles.customerEntity}>
+                      <ProductThumb source={remoteImage(review.product?.images?.[0]?.url)} size={48} />
+                      <Text style={styles.entityName}>{review.product?.name || 'المنتج'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.reviewUserColumn}>
+                    <View style={styles.customerEntity}>
+                      <View style={styles.grayAvatarSmall} />
+                      <Text style={styles.entityName}>{displayName(review.user)}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.tableCell, styles.reviewDateColumn]}>{formatDate(review.createdAt)}</Text>
+                  <Text style={[styles.starsText, styles.reviewRatingColumn]}>{'★'.repeat(review.rating || 0)}</Text>
+                  <Text style={[styles.reviewComment, styles.reviewCommentColumn]} numberOfLines={2}>{review.comment || '-'}</Text>
+                  <View style={[styles.reviewActions, styles.reviewActionColumn]}>
+                    <TouchableOpacity
+                      style={styles.reviewApproveButton}
+                      onPress={() => onReviewStatus(review.id, 'APPROVED')}
+                      disabled={actionBusy === `review-${review.id}` || review.status === 'APPROVED'}
+                    ><Icon glyph={Icons.Check} color="#FFFFFF" size={17} /></TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.reviewRejectButton}
+                      onPress={() => onReviewStatus(review.id, 'REJECTED')}
+                      disabled={actionBusy === `review-${review.id}` || review.status === 'REJECTED'}
+                    ><Icon glyph={Icons.X} color={palette.red} size={17} /></TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-              <Text style={[styles.tableCell, styles.reviewDateColumn]}>{formatDate(review.createdAt)}</Text>
-              <Text style={[styles.starsText, styles.reviewRatingColumn]}>{'★'.repeat(review.rating || 0)}</Text>
-              <Text style={[styles.reviewComment, styles.reviewCommentColumn]} numberOfLines={2}>{review.comment || '-'}</Text>
-              <View style={[styles.reviewActions, styles.reviewActionColumn]}>
-                <TouchableOpacity
-                  style={styles.reviewApproveButton}
-                  onPress={() => onReviewStatus(review.id, 'APPROVED')}
-                  disabled={actionBusy === `review-${review.id}` || review.status === 'APPROVED'}
-                ><Icon glyph={Icons.Check} color="#FFFFFF" size={17} /></TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.reviewRejectButton}
-                  onPress={() => onReviewStatus(review.id, 'REJECTED')}
-                  disabled={actionBusy === `review-${review.id}` || review.status === 'REJECTED'}
-                ><Icon glyph={Icons.X} color={palette.red} size={17} /></TouchableOpacity>
-              </View>
+              )) : <EmptyState />}
             </View>
-            )) : <EmptyState />}
-          </View>
-        </ScrollView>
+          </ScrollView>
+          <PaginationControls pageData={data.reviews} onPageChange={onReviewsPageChange} />
+        </>
       )}
     </>
   );
 }
 
-function PaymentsView({ data }) {
-  const payments = data.payments;
+function PaymentsView({ data, onPageChange, onWalletPageChange }) {
+  const payments = data.payments.items || [];
+  const statusCounts = data.payments.summary?.statusCounts || {};
+  const walletTransactions = data.wallet?.transactions;
   return (
     <>
       <View style={styles.statsGrid}>
-        <StatCard label="مدفوعات" value={String(payments.length)} hint="الإجمالي" delta="0" icon={Icons.Package} />
-        <StatCard label="معلقة" value={String(payments.filter((payment) => payment.status === 'PENDING').length)} hint="بانتظار التأكيد" delta="0" icon={Icons.CircleX} tone="red" />
-        <StatCard label="مؤكدة" value={String(payments.filter((payment) => payment.status === 'PAID' || payment.status === 'CONFIRMED').length)} hint="تمت" delta="0" icon={Icons.TriangleAlert} tone="amber" />
-        <StatCard label="محفظة" value={String(data.wallet?.transactions?.length || 0)} hint="حركات" delta="0" icon={Icons.Clock3} tone="purple" />
+        <StatCard label="مدفوعات" value={String(data.payments.total || 0)} hint="الإجمالي" delta="0" icon={Icons.Package} />
+        <StatCard label="معلقة" value={String(statusCounts.PENDING || 0)} hint="بانتظار التأكيد" delta="0" icon={Icons.CircleX} tone="red" />
+        <StatCard label="مؤكدة" value={String((statusCounts.PAID || 0) + (statusCounts.CONFIRMED || 0))} hint="تمت" delta="0" icon={Icons.TriangleAlert} tone="amber" />
+        <StatCard label="محفظة" value={String(walletTransactions?.total || 0)} hint="حركات" delta="0" icon={Icons.Clock3} tone="purple" />
       </View>
       <View style={styles.paymentsTables}>
         <PaymentTable title="آخر المدفوعات" payments={payments} />
         <PaymentTable title="آخر عمليات السحب" payments={payments} />
       </View>
+      <PaginationControls pageData={data.payments} onPageChange={onPageChange} />
+      {walletTransactions ? (
+        <PaginationControls pageData={walletTransactions} onPageChange={onWalletPageChange} />
+      ) : null}
     </>
   );
 }
@@ -1165,8 +1251,14 @@ export default function DashboardWorkspace() {
   const [createType, setCreateType] = useState(null);
   const [selectedStoreId, setSelectedStoreId] = useState(null);
   const [editingPackage, setEditingPackage] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState('');
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [walletPage, setWalletPage] = useState(1);
 
   const selectSection = (section) => {
     setActive(section);
@@ -1185,7 +1277,7 @@ export default function DashboardWorkspace() {
           merchantApi.products(),
           merchantApi.coupons(),
           merchantApi.reels(),
-          merchantApi.wallet(),
+          merchantApi.wallet({ page: walletPage, limit: 20 }),
           catalogApi.categories(),
         ]);
 
@@ -1202,28 +1294,27 @@ export default function DashboardWorkspace() {
 
       const adminSession = await authApi.ensureAdminSession();
       setSession(adminSession);
-      const [stores, packages, orders, payments, users, reviews, deliveryEvents, categories] = await Promise.all([
+      const [stores, packages, orders, payments, users, reviews, deliveryEvents, categories, products] = await Promise.all([
         adminApi.stores(),
         adminApi.packages(),
-        adminApi.orders(),
-        adminApi.payments(),
-        adminApi.users(),
-        adminApi.reviews(),
+        adminApi.orders({ page: ordersPage, limit: 20 }),
+        adminApi.payments({ page: paymentsPage, limit: 20 }),
+        adminApi.users({ page: usersPage, limit: 20 }),
+        adminApi.reviews({ page: reviewsPage, limit: 20 }),
         adminApi.deliveryEvents(),
         catalogApi.categories(),
+        adminApi.products(),
       ]);
 
       const merchantResults = await Promise.allSettled([
-        merchantApi.products(),
         merchantApi.coupons(),
         merchantApi.reels(),
-        merchantApi.wallet(),
+        merchantApi.wallet({ page: walletPage, limit: 20 }),
       ]);
 
-      const products = merchantResults[0].status === 'fulfilled' ? merchantResults[0].value : [];
-      const coupons = merchantResults[1].status === 'fulfilled' ? merchantResults[1].value : [];
-      const reels = merchantResults[2].status === 'fulfilled' ? merchantResults[2].value : [];
-      const wallet = merchantResults[3].status === 'fulfilled' ? merchantResults[3].value : null;
+      const coupons = merchantResults[0].status === 'fulfilled' ? merchantResults[0].value : [];
+      const reels = merchantResults[1].status === 'fulfilled' ? merchantResults[1].value : [];
+      const wallet = merchantResults[2].status === 'fulfilled' ? merchantResults[2].value : null;
 
       setData({
         ...emptyRemoteData,
@@ -1250,7 +1341,7 @@ export default function DashboardWorkspace() {
 
   useEffect(() => {
     loadDashboard();
-  }, [mode]);
+  }, [mode, ordersPage, paymentsPage, usersPage, reviewsPage, walletPage]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1268,7 +1359,10 @@ export default function DashboardWorkspace() {
       if (createType === 'product') await merchantApi.createProduct(payload);
       if (createType === 'reel') await merchantApi.createReel(payload);
       if (createType === 'coupon') await merchantApi.createCoupon(payload);
-      if (createType === 'category') await adminApi.createCategory(payload);
+      if (createType === 'category') {
+        if (editingCategory) await adminApi.updateCategory(editingCategory.id, payload);
+        else await adminApi.createCategory(payload);
+      }
       if (createType === 'store') await adminApi.createStore(payload);
       if (createType === 'subscription') await adminApi.assignStorePackage(selectedStoreId, payload.packageId);
       if (createType === 'package') {
@@ -1279,6 +1373,7 @@ export default function DashboardWorkspace() {
       setCreateType(null);
       setSelectedStoreId(null);
       setEditingPackage(null);
+      setEditingCategory(null);
       await loadDashboard();
     } finally {
       setSaving(false);
@@ -1307,6 +1402,11 @@ export default function DashboardWorkspace() {
   const openPackageEditor = (storePackage = null) => {
     setEditingPackage(storePackage);
     setCreateType('package');
+  };
+
+  const openCategoryEditor = (category) => {
+    setEditingCategory(category);
+    setCreateType('category');
   };
 
   const togglePackage = (storePackage) => runAction(
@@ -1353,6 +1453,12 @@ export default function DashboardWorkspace() {
     'تمت أرشفة المنتج.',
   );
 
+  const updateCategoryImage = (categoryId, imageUrl) => runAction(
+    `category-${categoryId}`,
+    () => adminApi.updateCategory(categoryId, { imageUrl }),
+    'تم تحديث صورة القسم.',
+  );
+
   const toggleCoupon = (couponId, status) => runAction(
     `coupon-${couponId}`,
     () => merchantApi.updateCoupon(couponId, { status }),
@@ -1361,18 +1467,43 @@ export default function DashboardWorkspace() {
 
   const merchantCanCreate = mode === 'merchant';
   const adminCanCreate = mode === 'admin';
+  const changeOrdersPage = (page) => {
+    const totalPages = data.orders?.totalPages || 1;
+    if (page < 1 || page > totalPages) return;
+    setOrdersPage(page);
+  };
+  const changePaymentsPage = (page) => {
+    const totalPages = data.payments?.totalPages || 1;
+    if (page < 1 || page > totalPages) return;
+    setPaymentsPage(page);
+  };
+  const changeUsersPage = (page) => {
+    const totalPages = data.users?.totalPages || 1;
+    if (page < 1 || page > totalPages) return;
+    setUsersPage(page);
+  };
+  const changeReviewsPage = (page) => {
+    const totalPages = data.reviews?.totalPages || 1;
+    if (page < 1 || page > totalPages) return;
+    setReviewsPage(page);
+  };
+  const changeWalletPage = (page) => {
+    const totalPages = data.wallet?.transactions?.totalPages || 1;
+    if (page < 1 || page > totalPages) return;
+    setWalletPage(page);
+  };
 
   const contentBySection = {
     overview: <OverviewView data={data} />,
     stores: <StoresView data={data} onAdd={() => setCreateType('store')} onAssignPackage={openPackageAssignment} onChangeStatus={changeStoreStatus} />,
     packages: <PackagesView data={data} onAdd={() => openPackageEditor()} onEdit={openPackageEditor} onToggle={togglePackage} actionBusy={actionBusy} />,
-    orders: <OrdersView data={data} canManage={adminCanCreate} onStatusChange={changeOrderStatus} actionBusy={actionBusy} />,
+    orders: <OrdersView data={data} canManage={adminCanCreate} onStatusChange={changeOrderStatus} actionBusy={actionBusy} onPageChange={changeOrdersPage} />,
     products: <ProductsView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('product')} onArchive={archiveProduct} actionBusy={actionBusy} />,
-    categories: <CategoriesView data={data} canManage={adminCanCreate} onAdd={() => setCreateType('category')} />,
+    categories: <CategoriesView data={data} canManage={adminCanCreate} onAdd={() => setCreateType('category')} onEdit={openCategoryEditor} onUpdateImage={updateCategoryImage} actionBusy={actionBusy} />,
     reels: <ReelsView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('reel')} />,
     offers: <OffersView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('coupon')} onToggleCoupon={toggleCoupon} actionBusy={actionBusy} />,
-    customers: <CustomersView data={data} currentUserId={session?.user?.id} onUserStatus={changeUserStatus} onReviewStatus={changeReviewStatus} actionBusy={actionBusy} />,
-    payments: <PaymentsView data={data} />,
+    customers: <CustomersView data={data} currentUserId={session?.user?.id} onUserStatus={changeUserStatus} onReviewStatus={changeReviewStatus} actionBusy={actionBusy} onUsersPageChange={changeUsersPage} onReviewsPageChange={changeReviewsPage} />,
+    payments: <PaymentsView data={data} onPageChange={changePaymentsPage} onWalletPageChange={changeWalletPage} />,
     settings: <SettingsView />,
   };
   const content = contentBySection[active] || contentBySection.overview;
@@ -1417,6 +1548,7 @@ export default function DashboardWorkspace() {
             setCreateType(null);
             setSelectedStoreId(null);
             setEditingPackage(null);
+            setEditingCategory(null);
           }
         }}
         onSubmit={createEntity}
@@ -1428,6 +1560,9 @@ export default function DashboardWorkspace() {
           maxReels: String(editingPackage.maxReels),
           maxCoupons: String(editingPackage.maxCoupons),
           isActive: editingPackage.isActive,
+        } : editingCategory ? {
+          name: editingCategory.name,
+          imageUrl: editingCategory.imageUrl || '',
         } : null}
       />
     </View>

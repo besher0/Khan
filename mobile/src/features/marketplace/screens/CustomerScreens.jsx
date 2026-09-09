@@ -49,7 +49,8 @@ function listOrEmpty(list) {
   return Array.isArray(list) ? list.filter(Boolean) : [];
 }
 
-const PRODUCT_GRID_GAP = 5;
+const PRODUCT_GRID_GAP = 10;
+const homeTabs = ['الكل', 'عروض', 'أدوات معدلة', 'ألعاب أطفال', 'المنازل', 'العروض'];
 
 function useMarketplaceLayout() {
   const { width } = useWindowDimensions();
@@ -67,6 +68,54 @@ function useMarketplaceLayout() {
         : null;
 
   return { productCardStyle, collectionCardStyle };
+}
+
+function HomePromo() {
+  return (
+    <View style={styles.promoBanner}>
+      <View style={styles.promoText}>
+        <RText style={styles.promoTitle}>عروض وحسومات!</RText>
+        <RText style={styles.promoBody}>خصومات مميزة على مطاعم وكافيهات متاجر وخدمات ضمن خان</RText>
+        <TouchableOpacity style={styles.promoButton}>
+          <RText style={styles.promoButtonText}>اكتشف الآن</RText>
+          <AppIcon icon={Icons.ChevronLeft} size={14} color={palette.amber} />
+        </TouchableOpacity>
+      </View>
+      <Image source={images.storeBanner} style={styles.promoImage} />
+      <View style={styles.promoDots}>
+        <View style={[styles.promoDot, styles.promoDotActive]} />
+        <View style={styles.promoDot} />
+        <View style={styles.promoDot} />
+      </View>
+    </View>
+  );
+}
+
+function OfferBanners() {
+  return (
+    <View style={styles.offerBand}>
+      <View style={[styles.offerCard, styles.offerCardAmber]}>
+        <View style={styles.offerText}>
+          <RText style={styles.offerTitle}>خصم حتى</RText>
+          <RText style={styles.offerSub}>اشتري بـ 500 ل.س وأكثر واحصل على خصم</RText>
+          <TouchableOpacity style={[styles.offerButton, styles.offerButtonAmber]}>
+            <RText style={styles.offerButtonText}>تسوق الآن</RText>
+          </TouchableOpacity>
+        </View>
+        <Image source={images.storeBanner} style={styles.offerImage} />
+      </View>
+      <View style={styles.offerCard}>
+        <View style={styles.offerText}>
+          <RText style={styles.offerTitle}>توصيل مجاني</RText>
+          <RText style={styles.offerSub}>اشتري بـ 500 ل.س وأكثر إلى باب منزلك</RText>
+          <TouchableOpacity style={styles.offerButton}>
+            <RText style={styles.offerButtonText}>تسوق الآن</RText>
+          </TouchableOpacity>
+        </View>
+        <Image source={images.storeBanner} style={styles.offerImage} />
+      </View>
+    </View>
+  );
 }
 
 export function HomeScreen({
@@ -93,6 +142,7 @@ export function HomeScreen({
     <ScreenScroll>
       <HeaderSearch value={query} onChangeText={setQuery} onSubmit={() => onSearch?.(query)} />
       <DataNotice loading={loading} error={error} onRetry={onRetry} />
+      <HomePromo />
       <CategoryStrip items={categories} />
       {reels.length ? (
         <>
@@ -114,13 +164,34 @@ export function HomeScreen({
           </RtlHorizontalScroll>
         </>
       ) : null}
-      {products.length ? <SectionTitle title="المنتجات" icon={Icons.Package} onAction={() => onShowAll?.('recommended')} /> : null}
+      {products.length ? (
+        <>
+          <SectionTitle title="موصى به لك" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+          <RtlHorizontalScroll refreshKey={`home-featured-${products.length}`} contentContainerStyle={styles.horizontalCards}>
+            {products.slice(0, 6).map((product) => (
+              <ProductCard
+                key={`recommended-${product.id || product.title}`}
+                product={product}
+                compact
+                onOpen={onOpenProduct}
+                onAddToCart={onAddToCart}
+                onToggleFavorite={onToggleFavorite}
+                isFavorite={favorites.includes(product.id || product.title)}
+              />
+            ))}
+          </RtlHorizontalScroll>
+          <SectionTitle title="عرض الغفلة" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+          <OfferBanners />
+          <Tabs tabs={homeTabs} active="الكل" onChange={() => {}} />
+        </>
+      ) : null}
       <View style={styles.productGrid}>
         {products.map((product) => (
           <ProductCard
             key={`grid-${product.id || product.title}`}
             product={product}
             style={productCardStyle}
+            showcase
             onOpen={onOpenProduct}
             onAddToCart={onAddToCart}
             onToggleFavorite={onToggleFavorite}
@@ -461,11 +532,139 @@ export function ProductDetailsScreen({
   );
 }
 
+function formatCartSyp(value) {
+  const amount = Number(value) || 0;
+  return `${new Intl.NumberFormat('en-US').format(amount).replace(/,/g, '.')} ل.س`;
+}
+
+function formatCartUsd(value) {
+  const amount = Number(value) || 0;
+  return `$ ${new Intl.NumberFormat('en-US').format(amount).replace(/,/g, '.')}`;
+}
+
+function CartCheckmark() {
+  return <View style={styles.cartCheckmark} />;
+}
+
+function CartSummaryRow({ label, value, strong = false }) {
+  return (
+    <View style={[styles.cartReceiptLine, strong && styles.cartReceiptLineStrong]}>
+      <RText style={[styles.cartReceiptValue, strong && styles.cartReceiptValueStrong]}>{value}</RText>
+      <RText style={[styles.cartReceiptLabel, strong && styles.cartReceiptLabelStrong]}>{label}</RText>
+    </View>
+  );
+}
+
+function CartCouponBanner() {
+  return (
+    <View style={styles.cartCouponBanner}>
+      <View style={styles.cartCouponInfo}>
+        <AppIcon icon={Icons.TicketPercent || Icons.Ticket || Icons.BadgePercent} size={33} color={palette.green} strokeWidth={2.3} />
+        <View style={styles.cartCouponTextBlock}>
+          <RText style={styles.cartCouponTitle}>لديك كوبون خصم؟</RText>
+          <RText style={styles.cartCouponSub}>اضف الكود للحصول على خصم اضافي</RText>
+        </View>
+      </View>
+      <TouchableOpacity style={styles.cartCouponAction}>
+        <AppIcon icon={Icons.ChevronLeft} size={16} color={palette.amber} />
+        <RText style={styles.cartCouponActionText}>إضافة كود</RText>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CartQuantityControl({ product, quantity, id, onUpdateQuantity }) {
+  return (
+    <View style={styles.cartQty}>
+      <TouchableOpacity style={styles.cartQtyButton} onPress={() => onUpdateQuantity(product, quantity - 1, id)}>
+        <AppIcon icon={Icons.Minus} size={15} color={palette.ink} strokeWidth={2.7} />
+      </TouchableOpacity>
+      <RText style={styles.cartQtyValue}>{quantity}</RText>
+      <TouchableOpacity style={styles.cartQtyButton} onPress={() => onUpdateQuantity(product, quantity + 1, id)}>
+        <AppIcon icon={Icons.Plus} size={15} color={palette.ink} strokeWidth={2.7} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CartProductItem({ item, onUpdateQuantity }) {
+  const { id, product, quantity } = item;
+  const price = Number(product.priceValue || 0) * quantity;
+  const oldPrice = Number(product.oldPriceValue || product.compareAtPrice || product?.raw?.compareAtPrice || 0) || price + 5000;
+
+  return (
+    <View style={styles.cartItem}>
+      <View style={styles.cartItemCheckbox}>
+        <CartCheckmark />
+      </View>
+      {product.image ? (
+        <Image source={product.image} style={styles.cartItemImage} />
+      ) : (
+        <View style={[styles.cartItemImage, styles.cartItemImageFallback]}>
+          <AppIcon icon={Icons.Package} size={22} color={palette.green} />
+        </View>
+      )}
+      <View style={styles.cartItemBody}>
+        <RText numberOfLines={1} style={styles.cartItemTitle}>{product.title}</RText>
+        <View style={styles.cartItemStoreRow}>
+          <View style={styles.cartStoreAvatar}>
+            {product.image ? <Image source={product.image} style={styles.cartStoreAvatarImage} /> : null}
+          </View>
+          <RText numberOfLines={1} style={styles.cartItemStore}>{product.store || 'متجر الشريحة الذكية'}</RText>
+        </View>
+        <RText style={styles.cartItemColor}>اللون: أزرق</RText>
+        <View style={styles.cartPriceRow}>
+          <RText style={styles.cartItemPrice}>{formatCartSyp(price)}</RText>
+          <RText style={styles.cartOldPrice}>{formatCartSyp(oldPrice)}</RText>
+        </View>
+        <CartQuantityControl product={product} quantity={quantity} id={id} onUpdateQuantity={onUpdateQuantity} />
+      </View>
+    </View>
+  );
+}
+
+function CartOrderSummary({ subtotal, shippingCost, onCheckout }) {
+  return (
+    <View style={styles.cartSummary}>
+      <RText style={styles.cartSummaryTitle}>ملخص الطلب</RText>
+      <View style={styles.cartSummaryDashed}>
+        <CartSummaryRow label="المجموع" value={formatCartUsd(shippingCost)} />
+        <CartSummaryRow label="وزن الصندوق" value="300 g" />
+        <CartSummaryRow label="كلفة الشحن" value={formatCartUsd(shippingCost)} />
+        <CartSummaryRow label="التكلفة الإجمالية" value={formatCartUsd(shippingCost || subtotal)} strong />
+      </View>
+      <TouchableOpacity style={styles.checkoutButton} onPress={onCheckout}>
+        <RText style={styles.checkoutText}>تأكيد</RText>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CartCheckoutSheet({ itemCount, subtotal, onCheckout }) {
+  return (
+    <View style={styles.cartCheckoutSheet}>
+      <View style={styles.cartCheckoutMeta}>
+        <View style={styles.cartSelectionInfo}>
+          <CartCheckmark />
+          <RText style={styles.cartSelectionTitle}>العناصر ({itemCount})</RText>
+        </View>
+        <RText style={styles.cartCheckoutTotal}>{formatCartSyp(subtotal)}</RText>
+      </View>
+      <TouchableOpacity style={styles.cartCheckoutButton} onPress={onCheckout}>
+        <AppIcon icon={Icons.ShoppingCart} size={25} color={palette.white} strokeWidth={2.4} />
+        <RText style={styles.cartCheckoutText}>التقدم بإتمام الشراء</RText>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShopping, onCheckout }) {
   const subtotal = useMemo(
     () => cart.reduce((total, item) => total + (item.product.priceValue || 0) * item.quantity, 0),
     [cart],
   );
+  const itemCount = cart.length;
+  const shippingCost = 3490;
 
   if (!cart.length) {
     return (
@@ -483,65 +682,38 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
   }
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.cartContent}>
-      <View style={styles.cartHeader}>
-        <RText style={styles.cartTitle}>السلة</RText>
-        <RText style={styles.cartCount}>{cart.length} منتجات</RText>
-      </View>
+    <View style={styles.cartScreen}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.cartContent}>
+        <View style={styles.cartTopBar}>
+          <RText style={styles.cartMiniTitle}>السلة</RText>
+          <TouchableOpacity style={styles.cartBackButton} onPress={onContinueShopping}>
+            <AppIcon icon={Icons.ChevronRight} size={23} color={palette.green} strokeWidth={2.5} />
+          </TouchableOpacity>
+          <RText style={styles.cartTitle}>محتويات سلة التسوق</RText>
+        </View>
 
-      {cart.map(({ id, product, quantity }) => (
-        <View key={id || product.id || product.title} style={styles.cartItem}>
-          {product.image ? (
-            <Image source={product.image} style={styles.cartItemImage} />
-          ) : (
-            <View style={[styles.cartItemImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.greenSoft }]}>
-              <AppIcon icon={Icons.Package} size={22} color={palette.green} />
-            </View>
-          )}
-          <View style={styles.cartItemBody}>
-            <RText numberOfLines={2} style={styles.cartItemTitle}>{product.title}</RText>
-            <RText style={styles.cartItemStore}>{product.store}</RText>
-            <RText style={styles.cartItemPrice}>{formatSyp((product.priceValue || 0) * quantity)}</RText>
-            <View style={styles.cartItemFooter}>
-              <View style={styles.cartQty}>
-                <TouchableOpacity style={styles.cartQtyButton} onPress={() => onUpdateQuantity(product, quantity - 1, id)}>
-                  <AppIcon icon={Icons.Minus} size={14} color={palette.greenDark} />
-                </TouchableOpacity>
-                <RText style={styles.cartQtyValue}>{quantity}</RText>
-                <TouchableOpacity style={styles.cartQtyButton} onPress={() => onUpdateQuantity(product, quantity + 1, id)}>
-                  <AppIcon icon={Icons.Plus} size={14} color={palette.greenDark} />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.cartRemove} onPress={() => onRemove(product, id)}>
-                <AppIcon icon={Icons.Trash2} size={17} color={palette.danger} />
-                <RText style={styles.cartRemoveText}>حذف</RText>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.cartSelectionBar}>
+          <TouchableOpacity
+            style={styles.cartTrashButton}
+            onPress={() => cart.forEach(({ id, product }) => onRemove(product, id))}
+          >
+            <AppIcon icon={Icons.Trash2} size={21} color="#FF563F" strokeWidth={1.8} />
+          </TouchableOpacity>
+          <View style={styles.cartSelectionInfo}>
+            <CartCheckmark />
+            <RText style={styles.cartSelectionTitle}>العناصر ({itemCount})</RText>
           </View>
         </View>
-      ))}
 
-      <View style={styles.cartSummary}>
-        <RText style={styles.cartSummaryTitle}>ملخص الطلب</RText>
-        <View style={styles.cartSummaryLine}>
-          <RText style={styles.cartSummaryValue}>{formatSyp(subtotal)}</RText>
-          <RText style={styles.cartSummaryLabel}>المجموع</RText>
-        </View>
-        <View style={styles.cartSummaryLine}>
-          <RText style={styles.cartSummaryFree}>مجاني</RText>
-          <RText style={styles.cartSummaryLabel}>التوصيل</RText>
-        </View>
-        <View style={styles.cartSummaryDivider} />
-        <View style={styles.cartSummaryLine}>
-          <RText style={styles.cartTotalValue}>{formatSyp(subtotal)}</RText>
-          <RText style={styles.cartTotalLabel}>الإجمالي</RText>
-        </View>
-        <TouchableOpacity style={styles.checkoutButton} onPress={onCheckout}>
-          <RText style={styles.checkoutText}>متابعة إتمام الطلب</RText>
-          <AppIcon icon={Icons.ArrowLeft} size={19} color={palette.white} />
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        {cart.map((item, index) => (
+          <CartProductItem key={item.id || item.product.id || `${item.product.title}-${index}`} item={item} onUpdateQuantity={onUpdateQuantity} />
+        ))}
+
+        <CartCouponBanner />
+        <CartOrderSummary subtotal={subtotal} shippingCost={shippingCost} onCheckout={onCheckout} />
+      </ScrollView>
+      <CartCheckoutSheet itemCount={itemCount} subtotal={subtotal} onCheckout={onCheckout} />
+    </View>
   );
 }
 
@@ -757,10 +929,10 @@ function AuthField({ label, placeholder, icon, secure = false, leadingIcon, valu
 export function AuthScreen({ session, authLoading, authError, onLogin, onRegister, onLogout }) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
-    firstName: 'سارة',
-    lastName: 'خان',
-    phone: '0999000002',
-    password: 'Password123!',
+    firstName: '',
+    lastName: '',
+    phone: '',
+    password: '',
   });
   const login = mode === 'login';
   const update = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));

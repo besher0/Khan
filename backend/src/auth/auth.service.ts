@@ -78,7 +78,7 @@ export class AuthService {
   async refresh(refreshToken: string) {
     try {
       const payload = await this.jwt.verifyAsync<{ sub: string }>(refreshToken, {
-        secret: this.config.get<string>('JWT_REFRESH_SECRET') ?? 'dev-refresh-secret',
+        secret: this.getRequiredConfig('JWT_REFRESH_SECRET'),
       });
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
@@ -98,11 +98,11 @@ export class AuthService {
   private async signTokens(userId: string, phone: string, role: UserRole) {
     const payload = { sub: userId, phone, role };
     const accessToken = await this.jwt.signAsync(payload, {
-      secret: this.config.get<string>('JWT_ACCESS_SECRET') ?? 'dev-access-secret',
+      secret: this.getRequiredConfig('JWT_ACCESS_SECRET'),
       expiresIn: this.config.get<string>('JWT_ACCESS_EXPIRES_IN') ?? '15m',
     });
     const refreshToken = await this.jwt.signAsync(payload, {
-      secret: this.config.get<string>('JWT_REFRESH_SECRET') ?? 'dev-refresh-secret',
+      secret: this.getRequiredConfig('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? '30d',
     });
 
@@ -124,5 +124,13 @@ export class AuthService {
 
   private normalizePhone(phone: string) {
     return phone.trim().replace(/\s+/g, '');
+  }
+
+  private getRequiredConfig(key: string) {
+    const value = this.config.get<string>(key);
+    if (!value) {
+      throw new Error(`Missing required config: ${key}`);
+    }
+    return value;
   }
 }

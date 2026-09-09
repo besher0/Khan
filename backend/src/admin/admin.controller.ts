@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
@@ -14,6 +15,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { AdminService } from './admin.service';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import {
   AssignStorePackageDto,
   CreateStorePackageDto,
@@ -24,6 +26,7 @@ import {
   UpdateOrderStatusDto,
   UpdateStoreStatusDto,
   UpdateStorePackageDto,
+  UpdateCategoryDto,
   UpdateUserStatusDto,
 } from './dto';
 
@@ -41,6 +44,11 @@ export class AdminController {
   @Get('packages')
   packages() {
     return this.admin.packages();
+  }
+
+  @Get('products')
+  products() {
+    return this.admin.products();
   }
 
   @Post('packages')
@@ -72,14 +80,19 @@ export class AdminController {
     return this.admin.createCategory(dto);
   }
 
+  @Patch('categories/:id')
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.admin.updateCategory(id, dto);
+  }
+
   @Patch('stores/:id/status')
   updateStoreStatus(@Param('id') id: string, @Body() dto: UpdateStoreStatusDto) {
     return this.admin.updateStoreStatus(id, dto.status);
   }
 
   @Get('orders')
-  orders() {
-    return this.admin.orders();
+  orders(@Query() query: PageQueryDto) {
+    return this.admin.orders(query);
   }
 
   @Patch('orders/:id/status')
@@ -92,8 +105,8 @@ export class AdminController {
   }
 
   @Get('payments')
-  payments() {
-    return this.admin.payments();
+  payments(@Query() query: PageQueryDto) {
+    return this.admin.payments(query);
   }
 
   @Patch('payments/:id/confirm')
@@ -115,8 +128,8 @@ export class AdminController {
   }
 
   @Get('users')
-  users() {
-    return this.admin.users();
+  users(@Query() query: PageQueryDto) {
+    return this.admin.users(query);
   }
 
   @Patch('users/:id/status')
@@ -125,8 +138,8 @@ export class AdminController {
   }
 
   @Get('reviews')
-  reviews() {
-    return this.admin.reviews();
+  reviews(@Query() query: PageQueryDto) {
+    return this.admin.reviews(query);
   }
 
   @Patch('reviews/:id/approve')

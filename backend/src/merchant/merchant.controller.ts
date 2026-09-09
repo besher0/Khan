@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
@@ -14,6 +15,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import {
   CreateCouponDto,
   CreateProductDto,
@@ -72,8 +74,8 @@ export class MerchantController {
   }
 
   @Get('orders')
-  orders(@CurrentUser() user: AuthenticatedUser) {
-    return this.merchant.orders(user.id);
+  orders(@CurrentUser() user: AuthenticatedUser, @Query() query: PageQueryDto) {
+    return this.merchant.orders(user.id, query);
   }
 
   @Get('coupons')
@@ -115,7 +117,7 @@ export class MerchantController {
   }
 
   @Get('wallet')
-  wallet(@CurrentUser() user: AuthenticatedUser) {
-    return this.merchant.wallet(user.id);
+  wallet(@CurrentUser() user: AuthenticatedUser, @Query() query: PageQueryDto) {
+    return this.merchant.wallet(user.id, query);
   }
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { Image, TouchableOpacity, View } from 'react-native';
 import { authApi, cartApi, catalogApi, ordersApi } from '../../services/api';
 import { styles } from './theme/styles';
 import {
@@ -13,6 +13,8 @@ import {
   palette,
 } from './shared/marketplaceShared';
 import * as Icons from '../../../icons';
+import tabCartImage from '../../../assets/tab-cart.png';
+import tabShopImage from '../../../assets/tab-shop.png';
 import {
   AuthScreen,
   CartScreen,
@@ -28,9 +30,9 @@ import {
 
 const bottomTabs = [
   { key: 'account', label: 'حسابي', icon: Icons.User, screen: 'auth' },
-  { key: 'cart', label: 'السلة', icon: Icons.ShoppingCart, screen: 'cart' },
+  { key: 'cart', label: 'السلة', icon: Icons.ShoppingCart, image: tabCartImage, screen: 'cart' },
   { key: 'reels', label: 'خان', icon: Icons.Video, screen: 'reels', center: true },
-  { key: 'shop', label: 'تسوق', icon: Icons.Search, screen: 'search' },
+  { key: 'shop', label: 'تسوق', icon: Icons.Search, image: tabShopImage, screen: 'search' },
   { key: 'home', label: 'الرئيسية', icon: Icons.Home, screen: 'home' },
 ];
 
@@ -46,14 +48,18 @@ function BottomNav({ screen, onChange, cartCount }) {
             onPress={() => onChange(item.screen)}
           >
             <View style={[item.center ? styles.centerButton : styles.navIconWrap, active && styles.navIconActive]}>
-              <AppIcon icon={item.icon} size={item.center ? 23 : 21} color={active || item.center ? palette.green : palette.muted} />
+              {item.image ? (
+                <Image source={item.image} style={[styles.bottomImageIcon, active && styles.bottomImageIconActive]} />
+              ) : (
+                <AppIcon icon={item.icon} size={item.center ? 23 : 21} color={active || item.center ? palette.green : palette.muted} />
+              )}
               {item.key === 'cart' && cartCount > 0 ? (
                 <View style={styles.cartBadge}>
                   <RText style={styles.cartBadgeText}>{cartCount > 9 ? '9+' : cartCount}</RText>
                 </View>
               ) : null}
             </View>
-            {!item.center ? (
+            {!item.center && !item.image ? (
               <RText style={[styles.bottomLabel, active && styles.bottomLabelActive]}>{item.label}</RText>
             ) : null}
           </TouchableOpacity>
@@ -449,7 +455,7 @@ export default function PhoneExperience() {
           <RText style={styles.toastText}>{toast}</RText>
         </View>
       ) : null}
-      {screen !== 'reels' ? (
+      {!['reels', 'cart'].includes(screen) ? (
         <BottomNav screen={screen} onChange={setScreen} cartCount={cartCount} />
       ) : null}
     </View>

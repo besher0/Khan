@@ -11,6 +11,7 @@ import {
   StoreStatus,
   SubscriptionStatus,
 } from '@prisma/client';
+import { PageQueryDto } from '../common/dto/page-query.dto';
 import { slugify } from '../common/utils/slugify';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -23,6 +24,17 @@ import {
   UpdateStoreDto,
   UpsertStoreDto,
 } from './dto';
+
+const safeUserSelect = {
+  id: true,
+  email: true,
+  phone: true,
+  firstName: true,
+  lastName: true,
+  role: true,
+  status: true,
+  createdAt: true,
+} as const;
 
 @Injectable()
 export class MerchantService {
@@ -156,13 +168,30 @@ export class MerchantService {
     });
   }
 
-  async orders(userId: string) {
+  async orders(userId: string, query: PageQueryDto) {
     const store = await this.requireStore(userId);
-    return this.prisma.order.findMany({
-      where: { storeId: store.id },
-      include: { user: true, items: true, payment: true, deliveryEvents: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = { storeId: store.id };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        include: { user: { select: safeUserSelect }, items: true, payment: true, deliveryEvents: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: limit,
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    };
   }
 
   async coupons(userId: string) {
@@ -245,22 +274,39 @@ export class MerchantService {
     });
   }
 
-  async wallet(userId: string) {
+  async wallet(userId: string, query: PageQueryDto) {
     const store = await this.requireStore(userId);
-    const [transactions, totals] = await Promise.all([
+    const page = query.page;
+    const limit = query.limit;
+    const skip = (page - 1) * limit;
+    const where = { storeId: store.id };
+    const [items, total, totals] = await this.prisma.$transaction([
       this.prisma.walletTransaction.findMany({
-        where: { storeId: store.id },
+        where,
         include: { order: true },
         orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
       }),
+      this.prisma.walletTransaction.count({ where }),
       this.prisma.walletTransaction.groupBy({
         by: ['status'],
-        where: { storeId: store.id },
+        where,
+        orderBy: { status: 'asc' },
         _sum: { amount: true },
       }),
     ]);
 
-    return { transactions, totals };
+    return {
+      transactions: {
+        items,
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+      totals,
+    };
   }
 
   private async requireStore(userId: string) {
