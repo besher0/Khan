@@ -12,6 +12,7 @@ import {
   SubscriptionStatus,
 } from '@prisma/client';
 import { PageQueryDto } from '../common/dto/page-query.dto';
+import { safeUserSelect } from '../common/prisma/safe-user-select';
 import { slugify } from '../common/utils/slugify';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -24,17 +25,6 @@ import {
   UpdateStoreDto,
   UpsertStoreDto,
 } from './dto';
-
-const safeUserSelect = {
-  id: true,
-  email: true,
-  phone: true,
-  firstName: true,
-  lastName: true,
-  role: true,
-  status: true,
-  createdAt: true,
-} as const;
 
 @Injectable()
 export class MerchantService {

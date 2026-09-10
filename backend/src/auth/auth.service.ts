@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { safeUserSelect } from '../common/prisma/safe-user-select';
 import { LoginDto, RegisterDto } from './dto';
 
 @Injectable()
@@ -38,7 +39,7 @@ export class AuthService {
         role,
         passwordHash: await bcrypt.hash(dto.password, 12),
       },
-      select: this.safeUserSelect(),
+      select: safeUserSelect,
     });
 
     return {
@@ -82,7 +83,7 @@ export class AuthService {
       });
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        select: this.safeUserSelect(),
+        select: safeUserSelect,
       });
 
       if (!user || user.status !== UserStatus.ACTIVE) {
@@ -107,19 +108,6 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
-  }
-
-  private safeUserSelect() {
-    return {
-      id: true,
-      email: true,
-      phone: true,
-      firstName: true,
-      lastName: true,
-      role: true,
-      status: true,
-      createdAt: true,
-    };
   }
 
   private normalizePhone(phone: string) {

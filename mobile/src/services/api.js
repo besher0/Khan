@@ -253,7 +253,7 @@ export const adminApi = {
   createDeliveryEvent: (payload) => post('/admin/delivery-events', payload, { authArea: 'admin' }),
   users: (query = {}) => apiFetch(`/admin/users${makeQuery(query)}`, { authArea: 'admin' }),
   updateUserStatus: (id, status) => patch(`/admin/users/${id}/status`, { status }, { authArea: 'admin' }),
-  reviews: () => apiFetch('/admin/reviews', { authArea: 'admin' }),
+  reviews: (query = {}) => apiFetch(`/admin/reviews${makeQuery(query)}`, { authArea: 'admin' }),
   approveReview: (id) => patch(`/admin/reviews/${id}/approve`, {}, { authArea: 'admin' }),
   rejectReview: (id) => patch(`/admin/reviews/${id}/reject`, {}, { authArea: 'admin' }),
   updateCategory: (id, payload) => patch(`/admin/categories/${id}`, payload, { authArea: 'admin' }),

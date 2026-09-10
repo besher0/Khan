@@ -13,6 +13,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { PageQueryDto } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { safeUserSelect } from '../common/prisma/safe-user-select';
 import { slugify } from '../common/utils/slugify';
 import {
   CreateAdminStoreDto,
@@ -24,17 +25,6 @@ import {
   UpdateStorePackageDto,
   UpdateCategoryDto,
 } from './dto';
-
-const safeUserSelect = {
-  id: true,
-  email: true,
-  phone: true,
-  firstName: true,
-  lastName: true,
-  role: true,
-  status: true,
-  createdAt: true,
-} as const;
 
 @Injectable()
 export class AdminService {
