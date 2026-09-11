@@ -149,6 +149,7 @@ function CartCheckoutSheet({ itemCount, subtotal, onCheckout }) {
 }
 
 export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShopping, onCheckout }) {
+  const [showOrderSummary, setShowOrderSummary] = useState(false);
   const subtotal = useMemo(
     () => cart.reduce((total, item) => total + (item.product.priceValue || 0) * item.quantity, 0),
     [cart],
@@ -173,7 +174,10 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
 
   return (
     <View style={styles.cartScreen}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.cartContent}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.cartContent, showOrderSummary && styles.cartContentSummaryStep]}
+      >
         <View style={styles.cartTopBar}>
           <RText style={styles.cartMiniTitle}>السلة</RText>
           <TouchableOpacity style={styles.cartBackButton} onPress={onContinueShopping}>
@@ -200,9 +204,13 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
         ))}
 
         <CartCouponBanner />
-        <CartOrderSummary subtotal={subtotal} shippingCost={shippingCost} onCheckout={onCheckout} />
+        {showOrderSummary ? (
+          <CartOrderSummary subtotal={subtotal} shippingCost={shippingCost} onCheckout={onCheckout} />
+        ) : null}
       </ScrollView>
-      <CartCheckoutSheet itemCount={itemCount} subtotal={subtotal} onCheckout={onCheckout} />
+      {!showOrderSummary ? (
+        <CartCheckoutSheet itemCount={itemCount} subtotal={subtotal} onCheckout={() => setShowOrderSummary(true)} />
+      ) : null}
     </View>
   );
 }
@@ -347,7 +355,17 @@ function AuthField({ label, placeholder, icon, secure = false, leadingIcon, valu
   );
 }
 
-export function AuthScreen({ session, authLoading, authError, onLogin, onRegister, onLogout }) {
+export function AuthScreen({
+  session,
+  authLoading,
+  authError,
+  onLogin,
+  onRegister,
+  onVerifyRegister,
+  onRequestPasswordOtp,
+  onResetPassword,
+  onLogout,
+}) {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({
     firstName: '',
@@ -355,8 +373,57 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
     phone: '',
     password: '',
   });
+  const [otpCode, setOtpCode] = useState('');
+  const [pendingRegister, setPendingRegister] = useState(null);
+  const [pendingReset, setPendingReset] = useState(null);
+  const [resetForm, setResetForm] = useState({ phone: '', password: '' });
   const login = mode === 'login';
   const update = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
+  const updateReset = (key) => (value) => setResetForm((current) => ({ ...current, [key]: value }));
+
+  const requestRegisterOtp = async () => {
+    const verification = await onRegister?.({
+      firstName: form.firstName,
+      lastName: form.lastName,
+      phone: form.phone,
+      password: form.password,
+      role: 'CUSTOMER',
+    });
+    if (verification) {
+      setPendingRegister(verification);
+      setOtpCode('');
+    }
+  };
+
+  const verifyRegisterOtp = async () => {
+    await onVerifyRegister?.({
+      phone: pendingRegister?.phone || form.phone,
+      requestId: pendingRegister?.requestId,
+      code: otpCode,
+    });
+  };
+
+  const requestResetOtp = async () => {
+    const verification = await onRequestPasswordOtp?.({ phone: resetForm.phone });
+    if (verification) {
+      setPendingReset(verification);
+      setOtpCode('');
+    }
+  };
+
+  const resetPassword = async () => {
+    const done = await onResetPassword?.({
+      phone: pendingReset?.phone || resetForm.phone,
+      requestId: pendingReset?.requestId,
+      code: otpCode,
+      password: resetForm.password,
+    });
+    if (done) {
+      setPendingReset(null);
+      setOtpCode('');
+      setMode('login');
+    }
+  };
 
   if (session?.user) {
     return (
@@ -371,6 +438,61 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
             <RText style={styles.successButtonText}>تسجيل الخروج</RText>
           </TouchableOpacity>
         </View>
+      </ScreenScroll>
+    );
+  }
+
+  if (mode === 'reset') {
+    return (
+      <ScreenScroll>
+        <RText style={styles.authTitle}>Reset password</RText>
+        {authError ? (
+          <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError}</RText>
+        ) : null}
+        {!pendingReset ? (
+          <>
+            <AuthField label="Phone number" value={resetForm.phone} onChangeText={updateReset('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
+            <TouchableOpacity style={styles.authPrimary} onPress={requestResetOtp}>
+              <RText style={styles.authPrimaryText}>{authLoading ? 'Sending Telegram code...' : 'Send Telegram code'}</RText>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <AuthField label="Telegram code" value={otpCode} onChangeText={setOtpCode} placeholder="123456" icon={Icons.MessageCircle || Icons.Send} />
+            <AuthField label="New password" value={resetForm.password} onChangeText={updateReset('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
+            <TouchableOpacity style={styles.authPrimary} onPress={resetPassword}>
+              <RText style={styles.authPrimaryText}>{authLoading ? 'Resetting...' : 'Reset password'}</RText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={requestResetOtp}>
+              <RText style={styles.linkText}>Resend Telegram code</RText>
+            </TouchableOpacity>
+          </>
+        )}
+        <TouchableOpacity onPress={() => setMode('login')}>
+          <RText style={styles.linkText}>Back to login</RText>
+        </TouchableOpacity>
+      </ScreenScroll>
+    );
+  }
+
+  if (mode === 'signup' && pendingRegister) {
+    return (
+      <ScreenScroll>
+        <RText style={styles.authTitle}>Verify Telegram code</RText>
+        {authError ? (
+          <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError}</RText>
+        ) : null}
+        <RText style={styles.authQuestion}>We sent a Telegram verification code to {pendingRegister.phone}.</RText>
+        <AuthField label="Telegram code" value={otpCode} onChangeText={setOtpCode} placeholder="123456" icon={Icons.MessageCircle || Icons.Send} />
+        <TouchableOpacity style={styles.authPrimary} onPress={verifyRegisterOtp}>
+          <RText style={styles.authPrimaryText}>{authLoading ? 'Verifying...' : 'Create account'}</RText>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={requestRegisterOtp}>
+          <RText style={styles.linkText}>Resend Telegram code</RText>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setPendingRegister(null)}>
+          <RText style={styles.linkText}>Edit registration details</RText>
+        </TouchableOpacity>
       </ScreenScroll>
     );
   }
@@ -399,7 +521,7 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
           <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
           <AuthField label="كلمة المرور" value={form.password} onChangeText={update('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
           <View style={styles.authInline}>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => setMode('reset')}>
               <RText style={styles.linkText}>نسيت كلمة المرور؟</RText>
             </TouchableOpacity>
             <View style={styles.rememberRow}>
@@ -429,13 +551,7 @@ export function AuthScreen({ session, authLoading, authError, onLogin, onRegiste
           </View>
           <TouchableOpacity
             style={styles.authPrimary}
-            onPress={() => onRegister?.({
-              firstName: form.firstName,
-              lastName: form.lastName,
-              phone: form.phone,
-              password: form.password,
-              role: 'CUSTOMER',
-            })}
+            onPress={requestRegisterOtp}
           >
             <RText style={styles.authPrimaryText}>{authLoading ? 'جاري إنشاء الحساب...' : 'إنشاء حساب'}</RText>
           </TouchableOpacity>

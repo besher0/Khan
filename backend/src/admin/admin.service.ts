@@ -14,6 +14,7 @@ import * as bcrypt from 'bcryptjs';
 import { PageQueryDto } from '../common/dto/page-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { safeUserSelect } from '../common/prisma/safe-user-select';
+import { normalizeSyrianPhone } from '../auth/phone';
 import { slugify } from '../common/utils/slugify';
 import {
   CreateAdminStoreDto,
@@ -86,7 +87,7 @@ export class AdminService {
   }
 
   async createStore(dto: CreateAdminStoreDto) {
-    const phone = dto.ownerPhone.trim().replace(/\s+/g, '');
+    const phone = normalizeSyrianPhone(dto.ownerPhone);
     const [existingUser, storePackage] = await Promise.all([
       this.prisma.user.findFirst({
         where: { phone },

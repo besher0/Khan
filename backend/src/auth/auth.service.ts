@@ -5,21 +5,44 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { UserRole, UserStatus } from '@prisma/client';
+import { PhoneVerificationPurpose, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { safeUserSelect } from '../common/prisma/safe-user-select';
-import { LoginDto, RegisterDto } from './dto';
+import {
+  LoginDto,
+  PasswordRequestOtpDto,
+  PasswordResetDto,
+  RegisterDto,
+  RegisterRequestOtpDto,
+  RegisterVerifyOtpDto,
+} from './dto';
+import { normalizeSyrianPhone } from './phone';
+import { TelegramGatewayService } from './telegram-gateway.service';
+
+type RegisterVerificationPayload = {
+  firstName: string;
+  lastName: string;
+  role: Extract<UserRole, 'CUSTOMER' | 'MERCHANT'>;
+  passwordHash: string;
+};
 
 @Injectable()
 export class AuthService {
+  private readonly maxOtpAttempts = 5;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly telegram: TelegramGatewayService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  register(_dto: RegisterDto) {
+    throw new BadRequestException('Registration requires Telegram OTP. Use /auth/register/request-otp first.');
+  }
+
+  async requestRegisterOtp(dto: RegisterRequestOtpDto) {
     const phone = this.normalizePhone(dto.phone);
     const role = dto.role === UserRole.MERCHANT ? UserRole.MERCHANT : UserRole.CUSTOMER;
 
@@ -31,21 +54,159 @@ export class AuthService {
       throw new BadRequestException('Phone is already registered');
     }
 
-    const user = await this.prisma.user.create({
+    const payload: RegisterVerificationPayload = {
+      firstName: dto.firstName.trim(),
+      lastName: dto.lastName.trim(),
+      role,
+      passwordHash: await bcrypt.hash(dto.password, 12),
+    };
+
+    if (!payload.firstName || !payload.lastName) {
+      throw new BadRequestException('First name and last name are required');
+    }
+
+    await this.prisma.phoneVerification.updateMany({
+      where: {
+        phone,
+        purpose: PhoneVerificationPurpose.REGISTER,
+        consumedAt: null,
+      },
+      data: { consumedAt: new Date() },
+    });
+
+    const telegramRequest = await this.telegram.sendVerificationMessage(
+      phone,
+      PhoneVerificationPurpose.REGISTER,
+    );
+    const expiresAt = this.verificationExpiry();
+
+    await this.prisma.phoneVerification.create({
       data: {
         phone,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        role,
-        passwordHash: await bcrypt.hash(dto.password, 12),
+        purpose: PhoneVerificationPurpose.REGISTER,
+        requestId: telegramRequest.request_id,
+        payload,
+        expiresAt,
       },
-      select: safeUserSelect,
+    });
+
+    return {
+      phone,
+      requestId: telegramRequest.request_id,
+      expiresAt,
+    };
+  }
+
+  async verifyRegisterOtp(dto: RegisterVerifyOtpDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const verification = await this.findOpenVerification(
+      phone,
+      dto.requestId,
+      PhoneVerificationPurpose.REGISTER,
+    );
+
+    await this.verifyTelegramCode(verification.id, dto.requestId, dto.code);
+
+    const existing = await this.prisma.user.findUnique({ where: { phone } });
+    if (existing) {
+      throw new BadRequestException('Phone is already registered');
+    }
+
+    const payload = this.parseRegisterPayload(verification.payload);
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          phone,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          role: payload.role,
+          passwordHash: payload.passwordHash,
+        },
+        select: safeUserSelect,
+      });
+
+      await tx.phoneVerification.update({
+        where: { id: verification.id },
+        data: { consumedAt: new Date() },
+      });
+
+      return created;
     });
 
     return {
       user,
       tokens: await this.signTokens(user.id, user.phone, user.role),
     };
+  }
+
+  async requestPasswordOtp(dto: PasswordRequestOtpDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const user = await this.prisma.user.findUnique({ where: { phone } });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new BadRequestException('No active account found for this phone');
+    }
+
+    await this.prisma.phoneVerification.updateMany({
+      where: {
+        phone,
+        purpose: PhoneVerificationPurpose.RESET_PASSWORD,
+        consumedAt: null,
+      },
+      data: { consumedAt: new Date() },
+    });
+
+    const telegramRequest = await this.telegram.sendVerificationMessage(
+      phone,
+      PhoneVerificationPurpose.RESET_PASSWORD,
+    );
+    const expiresAt = this.verificationExpiry();
+
+    await this.prisma.phoneVerification.create({
+      data: {
+        phone,
+        purpose: PhoneVerificationPurpose.RESET_PASSWORD,
+        requestId: telegramRequest.request_id,
+        expiresAt,
+      },
+    });
+
+    return {
+      phone,
+      requestId: telegramRequest.request_id,
+      expiresAt,
+    };
+  }
+
+  async resetPassword(dto: PasswordResetDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const verification = await this.findOpenVerification(
+      phone,
+      dto.requestId,
+      PhoneVerificationPurpose.RESET_PASSWORD,
+    );
+    const user = await this.prisma.user.findUnique({ where: { phone } });
+
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new BadRequestException('No active account found for this phone');
+    }
+
+    await this.verifyTelegramCode(verification.id, dto.requestId, dto.code);
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { phone },
+        data: { passwordHash },
+      }),
+      this.prisma.phoneVerification.update({
+        where: { id: verification.id },
+        data: { consumedAt: new Date() },
+      }),
+    ]);
+
+    return { ok: true };
   }
 
   async login(dto: LoginDto) {
@@ -65,7 +226,6 @@ export class AuthService {
     return {
       user: {
         id: user.id,
-        email: user.email,
         phone: user.phone,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -111,7 +271,79 @@ export class AuthService {
   }
 
   private normalizePhone(phone: string) {
-    return phone.trim().replace(/\s+/g, '');
+    return normalizeSyrianPhone(phone);
+  }
+
+  private verificationExpiry() {
+    const ttlSeconds = Number(this.config.get<string>('TELEGRAM_GATEWAY_TTL_SECONDS') ?? 300);
+    const ttl = Number.isFinite(ttlSeconds) ? ttlSeconds : 300;
+    return new Date(Date.now() + ttl * 1000);
+  }
+
+  private async findOpenVerification(
+    phone: string,
+    requestId: string,
+    purpose: PhoneVerificationPurpose,
+  ) {
+    const verification = await this.prisma.phoneVerification.findFirst({
+      where: {
+        phone,
+        requestId,
+        purpose,
+        consumedAt: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!verification) {
+      throw new BadRequestException('Verification request was not found');
+    }
+
+    if (verification.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Verification code has expired');
+    }
+
+    if (verification.attemptCount >= this.maxOtpAttempts) {
+      throw new BadRequestException('Maximum verification attempts exceeded');
+    }
+
+    return verification;
+  }
+
+  private async verifyTelegramCode(
+    verificationId: string,
+    requestId: string,
+    code: string,
+  ) {
+    const status = await this.telegram.checkVerificationStatus(requestId, code);
+    const verificationStatus = status.verification_status?.status;
+
+    await this.prisma.phoneVerification.update({
+      where: { id: verificationId },
+      data: { attemptCount: { increment: 1 } },
+    });
+
+    if (verificationStatus !== 'code_valid') {
+      throw new BadRequestException('Invalid verification code');
+    }
+  }
+
+  private parseRegisterPayload(payload: unknown): RegisterVerificationPayload {
+    if (!payload || typeof payload !== 'object') {
+      throw new BadRequestException('Registration payload is no longer valid');
+    }
+
+    const candidate = payload as Partial<RegisterVerificationPayload>;
+    if (
+      typeof candidate.firstName !== 'string' ||
+      typeof candidate.lastName !== 'string' ||
+      typeof candidate.passwordHash !== 'string' ||
+      ![UserRole.CUSTOMER, UserRole.MERCHANT].includes(candidate.role as Extract<UserRole, 'CUSTOMER' | 'MERCHANT'>)
+    ) {
+      throw new BadRequestException('Registration payload is no longer valid');
+    }
+
+    return candidate as RegisterVerificationPayload;
   }
 
   private getRequiredConfig(key: string) {

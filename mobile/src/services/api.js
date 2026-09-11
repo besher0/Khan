@@ -143,6 +143,14 @@ export const authApi = {
   setSession: writeSession,
   clearSession,
   login: (credentials, area = 'customer') => loginAs(area, credentials),
+  requestRegisterOtp: (payload) => post('/auth/register/request-otp', payload),
+  verifyRegisterOtp: async (payload, area = 'customer') => {
+    const session = await post('/auth/register/verify-otp', payload);
+    writeSession(session, area);
+    return session;
+  },
+  requestPasswordOtp: (payload) => post('/auth/password/request-otp', payload),
+  resetPassword: (payload) => post('/auth/password/reset', payload),
   register: async (payload, area = 'customer') => {
     const session = await post('/auth/register', payload);
     writeSession(session, area);

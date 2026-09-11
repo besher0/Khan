@@ -3,10 +3,11 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   MinLength,
 } from 'class-validator';
 
-export class RegisterDto {
+export class RegisterRequestOtpDto {
   @IsString()
   firstName: string;
 
@@ -26,6 +27,20 @@ export class RegisterDto {
   role?: typeof UserRole.CUSTOMER | typeof UserRole.MERCHANT;
 }
 
+export class RegisterVerifyOtpDto {
+  @IsString()
+  phone: string;
+
+  @IsString()
+  requestId: string;
+
+  @IsString()
+  @Matches(/^\d{4,8}$/)
+  code: string;
+}
+
+export class RegisterDto extends RegisterRequestOtpDto {}
+
 export class LoginDto {
   @IsString()
   @MinLength(6)
@@ -38,4 +53,26 @@ export class LoginDto {
 export class RefreshDto {
   @IsString()
   refreshToken: string;
+}
+
+export class PasswordRequestOtpDto {
+  @IsString()
+  @MinLength(6)
+  phone: string;
+}
+
+export class PasswordResetDto {
+  @IsString()
+  phone: string;
+
+  @IsString()
+  requestId: string;
+
+  @IsString()
+  @Matches(/^\d{4,8}$/)
+  code: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
 }

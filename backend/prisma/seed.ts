@@ -16,11 +16,11 @@ async function main() {
 
   const [admin, ops, merchant, customer] = await Promise.all([
     prisma.user.upsert({
-      where: { email: 'admin@khan.local' },
+      where: { phone: '+963990000001' },
       update: {},
       create: {
         email: 'admin@khan.local',
-        phone: '0990000001',
+        phone: '+963990000001',
         firstName: 'Khan',
         lastName: 'Admin',
         role: UserRole.ADMIN,
@@ -28,11 +28,11 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'ops@khan.local' },
+      where: { phone: '+963990000002' },
       update: {},
       create: {
         email: 'ops@khan.local',
-        phone: '0990000002',
+        phone: '+963990000002',
         firstName: 'Khan',
         lastName: 'Ops',
         role: UserRole.OPS,
@@ -40,11 +40,11 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'merchant@khan.local' },
+      where: { phone: '+963999000001' },
       update: {},
       create: {
         email: 'merchant@khan.local',
-        phone: '0999000001',
+        phone: '+963999000001',
         firstName: 'Ahmad',
         lastName: 'Merchant',
         role: UserRole.MERCHANT,
@@ -52,11 +52,11 @@ async function main() {
       },
     }),
     prisma.user.upsert({
-      where: { email: 'customer@khan.local' },
+      where: { phone: '+963999000002' },
       update: {},
       create: {
         email: 'customer@khan.local',
-        phone: '0999000002',
+        phone: '+963999000002',
         firstName: 'Sara',
         lastName: 'Customer',
         role: UserRole.CUSTOMER,
@@ -74,7 +74,7 @@ async function main() {
       label: 'Home',
       city: 'Damascus',
       line1: 'Malki, main street',
-      phone: '0999000002',
+      phone: '+963999000002',
       isDefault: true,
     },
   });
@@ -184,7 +184,7 @@ async function main() {
     create: { userId: customer.id },
   });
 
-  console.log({ admin: admin.email, ops: ops.email, merchant: merchant.email, customer: customer.email, seededProducts: [watch.id, gift.id] });
+  console.log({ admin: admin.phone, ops: ops.phone, merchant: merchant.phone, customer: customer.phone, seededProducts: [watch.id, gift.id] });
 }
 
 main()

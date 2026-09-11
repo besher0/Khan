@@ -115,6 +115,11 @@ enum SubscriptionStatus {
   CANCELLED
 }
 
+enum PhoneVerificationPurpose {
+  REGISTER
+  RESET_PASSWORD
+}
+
 model User {
   id           String     @id @default(uuid())
   email        String?    @unique
@@ -135,6 +140,23 @@ model User {
   favorites      Favorite[]
   notifications  Notification[]
   deliveryEvents DeliveryEvent[] @relation("DeliveryEventActor")
+}
+
+model PhoneVerification {
+  id           String                   @id @default(uuid())
+  phone        String
+  purpose      PhoneVerificationPurpose
+  requestId    String                   @unique
+  payload      Json?
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  attemptCount Int                      @default(0)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@index([phone, purpose])
+  @@index([requestId])
+  @@index([expiresAt])
 }
 
 model Store {

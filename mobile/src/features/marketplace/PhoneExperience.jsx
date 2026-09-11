@@ -318,10 +318,49 @@ export default function PhoneExperience() {
     setAuthLoading(true);
     setAuthError('');
     try {
-      const nextSession = await authApi.register(payload, 'customer');
+      return await authApi.requestRegisterOtp(payload);
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleVerifyRegister = async (payload) => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      const nextSession = await authApi.verifyRegisterOtp(payload, 'customer');
       setSession(nextSession);
-      setToast('تم إنشاء الحساب وربطه');
+      setToast('Account created and linked.');
       setScreen('home');
+      return nextSession;
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleRequestPasswordOtp = async (payload) => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      return await authApi.requestPasswordOtp(payload);
+    } catch (error) {
+      setAuthError(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (payload) => {
+    setAuthLoading(true);
+    setAuthError('');
+    try {
+      await authApi.resetPassword(payload);
+      setToast('Password was reset. You can log in now.');
+      return true;
     } catch (error) {
       setAuthError(error.message);
     } finally {
@@ -411,6 +450,9 @@ export default function PhoneExperience() {
         authError={authError}
         onLogin={handleLogin}
         onRegister={handleRegister}
+        onVerifyRegister={handleVerifyRegister}
+        onRequestPasswordOtp={handleRequestPasswordOtp}
+        onResetPassword={handleResetPassword}
         onLogout={handleLogout}
       />
     ),
