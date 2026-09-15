@@ -15,7 +15,9 @@ npm run dev
 
 API prefix: `/api/v1`.
 
-Seed login password for all demo users: `Password123!`.
+Seed creates only admin/ops accounts and does not add marketplace products, stores, reels, coupons, or categories.
+Seed login password for system accounts: `Password123!`.
+To remove old marketplace seed records from an already-seeded database, run `npm run prisma:clear-marketplace-seed`.
 
 ## Core Decisions
 

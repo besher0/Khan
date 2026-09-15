@@ -76,3 +76,19 @@ export class PasswordResetDto {
   @MinLength(8)
   password: string;
 }
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+}

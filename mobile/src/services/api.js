@@ -16,6 +16,7 @@ const SESSION_KEYS = {
   merchant: 'khan.merchant.session',
   admin: 'khan.admin.session',
 };
+const REMEMBERED_CUSTOMER_KEY = 'khan.customer.remembered';
 
 function getStorage() {
   return typeof window !== 'undefined' ? window.localStorage : null;
@@ -43,6 +44,30 @@ function clearSession(area = 'customer') {
   const storage = getStorage();
   if (!storage) return;
   storage.removeItem(SESSION_KEYS[area]);
+}
+
+function readRememberedCustomer() {
+  const storage = getStorage();
+  if (!storage) return null;
+
+  try {
+    const raw = storage.getItem(REMEMBERED_CUSTOMER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeRememberedCustomer(account) {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(REMEMBERED_CUSTOMER_KEY, JSON.stringify(account));
+}
+
+function clearRememberedCustomer() {
+  const storage = getStorage();
+  if (!storage) return;
+  storage.removeItem(REMEMBERED_CUSTOMER_KEY);
 }
 
 function authHeaders(area) {
@@ -142,6 +167,9 @@ export const authApi = {
   getSession: readSession,
   setSession: writeSession,
   clearSession,
+  getRememberedCustomer: readRememberedCustomer,
+  setRememberedCustomer: writeRememberedCustomer,
+  clearRememberedCustomer,
   login: (credentials, area = 'customer') => loginAs(area, credentials),
   requestRegisterOtp: (payload) => post('/auth/register/request-otp', payload),
   verifyRegisterOtp: async (payload, area = 'customer') => {
@@ -151,6 +179,7 @@ export const authApi = {
   },
   requestPasswordOtp: (payload) => post('/auth/password/request-otp', payload),
   resetPassword: (payload) => post('/auth/password/reset', payload),
+  updateProfile: (payload, area = 'customer') => patch('/auth/me', payload, { authArea: area }),
   register: async (payload, area = 'customer') => {
     const session = await post('/auth/register', payload);
     writeSession(session, area);
@@ -201,12 +230,25 @@ export const ordersApi = {
   checkout: (payload) => post('/orders/checkout', payload, { authArea: 'customer' }),
   mine: () => apiFetch('/orders/my', { authArea: 'customer' }),
   get: (id) => apiFetch(`/orders/${id}`, { authArea: 'customer' }),
+  confirmDelivery: (id) =>
+    post(`/orders/${id}/confirm-delivery`, {}, { authArea: 'customer' }),
 };
 
 export const favoritesApi = {
   list: () => apiFetch('/favorites', { authArea: 'customer' }),
   add: (productId) => post(`/favorites/${productId}`, null, { authArea: 'customer' }),
   remove: (productId) => del(`/favorites/${productId}`, { authArea: 'customer' }),
+};
+
+export const notificationsApi = {
+  list: () => apiFetch('/notifications', { authArea: 'customer' }),
+  unreadCount: () => apiFetch('/notifications/unread-count', { authArea: 'customer' }),
+  registerDeviceToken: (payload) =>
+    post('/notifications/device-tokens', payload, { authArea: 'customer' }),
+  removeDeviceToken: (token) =>
+    del(`/notifications/device-tokens${makeQuery({ token })}`, { authArea: 'customer' }),
+  markRead: (id) => patch(`/notifications/${id}/read`, {}, { authArea: 'customer' }),
+  markAllRead: () => patch('/notifications/read-all', {}, { authArea: 'customer' }),
 };
 
 export const reviewsApi = {
@@ -244,6 +286,9 @@ export const merchantApi = {
 
 export const adminApi = {
   createCategory: (payload) => post('/admin/categories', payload, { authArea: 'admin' }),
+  banners: () => apiFetch('/admin/banners', { authArea: 'admin' }),
+  createBanner: (payload) => post('/admin/banners', payload, { authArea: 'admin' }),
+  updateBanner: (id, payload) => patch(`/admin/banners/${id}`, payload, { authArea: 'admin' }),
   packages: () => apiFetch('/admin/packages', { authArea: 'admin' }),
   createPackage: (payload) => post('/admin/packages', payload, { authArea: 'admin' }),
   updatePackage: (id, payload) => patch(`/admin/packages/${id}`, payload, { authArea: 'admin' }),

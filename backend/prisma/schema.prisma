@@ -103,6 +103,11 @@ enum NotificationType {
   SYSTEM
 }
 
+enum HomeBannerStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum DeliveryEventSource {
   ADMIN
   OPS
@@ -127,6 +132,7 @@ model User {
   passwordHash String
   firstName    String
   lastName     String
+  avatarUrl    String?
   role         UserRole   @default(CUSTOMER)
   status       UserStatus @default(ACTIVE)
   createdAt    DateTime   @default(now())
@@ -139,6 +145,7 @@ model User {
   reviews        Review[]
   favorites      Favorite[]
   notifications  Notification[]
+  deviceTokens   NotificationDeviceToken[]
   deliveryEvents DeliveryEvent[] @relation("DeliveryEventActor")
 }
 
@@ -261,11 +268,32 @@ model Product {
   reels      Reel[]
   reviews    Review[]
   favorites  Favorite[]
+  homeBanners HomeBanner[]
 
   @@unique([storeId, slug])
   @@index([storeId])
   @@index([categoryId])
   @@index([status])
+}
+
+model HomeBanner {
+  id          String           @id @default(uuid())
+  title       String
+  subtitle    String?
+  imageUrl    String
+  ctaLabel    String?
+  targetUrl   String?
+  productId   String?
+  position    Int              @default(0)
+  status      HomeBannerStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([position])
+  @@index([productId])
 }
 
 model ProductImage {
@@ -525,4 +553,17 @@ model Notification {
 
   @@index([userId])
   @@index([type])
+}
+
+model NotificationDeviceToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  platform  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

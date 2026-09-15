@@ -24,4 +24,9 @@ export class OrdersController {
   order(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.orders.getOrderForCustomer(user.id, id);
   }
+
+  @Post(':id/confirm-delivery')
+  confirmDelivery(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.orders.confirmDelivery(user.id, id);
+  }
 }

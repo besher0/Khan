@@ -16,6 +16,7 @@ import {
   RegisterDto,
   RegisterRequestOtpDto,
   RegisterVerifyOtpDto,
+  UpdateProfileDto,
 } from './dto';
 import { normalizeSyrianPhone } from './phone';
 import { TelegramGatewayService } from './telegram-gateway.service';
@@ -145,7 +146,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { phone } });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('No active account found for this phone');
+      throw new BadRequestException('لا يوجد حساب نشط مرتبط بهذا الرقم');
     }
 
     await this.prisma.phoneVerification.updateMany({
@@ -189,7 +190,7 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { phone } });
 
     if (!user || user.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('No active account found for this phone');
+      throw new BadRequestException('لا يوجد حساب نشط مرتبط بهذا الرقم');
     }
 
     await this.verifyTelegramCode(verification.id, dto.requestId, dto.code);
@@ -229,6 +230,7 @@ export class AuthService {
         phone: user.phone,
         firstName: user.firstName,
         lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
         role: user.role,
         status: user.status,
       },
@@ -254,6 +256,41 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const data: { firstName?: string; lastName?: string; avatarUrl?: string | null } = {};
+
+    if (dto.firstName !== undefined) {
+      const firstName = dto.firstName.trim();
+      if (!firstName) {
+        throw new BadRequestException('First name is required');
+      }
+      data.firstName = firstName;
+    }
+
+    if (dto.lastName !== undefined) {
+      const lastName = dto.lastName.trim();
+      if (!lastName) {
+        throw new BadRequestException('Last name is required');
+      }
+      data.lastName = lastName;
+    }
+
+    if (dto.avatarUrl !== undefined) {
+      const avatarUrl = dto.avatarUrl.trim();
+      data.avatarUrl = avatarUrl || null;
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException('No profile fields to update');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+      select: safeUserSelect,
+    });
   }
 
   private async signTokens(userId: string, phone: string, role: UserRole) {

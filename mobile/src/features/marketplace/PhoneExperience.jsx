@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Image, TouchableOpacity, View } from 'react-native';
-import { authApi, cartApi, catalogApi, ordersApi } from '../../services/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, ScrollView, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
+import { authApi, cartApi, catalogApi, favoritesApi, notificationsApi, ordersApi, reviewsApi } from '../../services/api';
 import { styles } from './theme/styles';
 import {
   AppIcon,
   RText,
   normalizeCart,
+  normalizeBanner,
   normalizeCategory,
   normalizeCoupon,
   normalizeProduct,
@@ -13,15 +15,23 @@ import {
   palette,
 } from './shared/marketplaceShared';
 import * as Icons from '../../../icons';
-import tabCartImage from '../../../assets/tab-cart.png';
-import tabShopImage from '../../../assets/tab-shop.png';
+import onboardingDeliveryImage from '../../../assets/onboarding-delivery.png';
+import onboardingReelsImage from '../../../assets/onboarding-reels.png';
+import onboardingShoppingImage from '../../../assets/onboarding-shopping.png';
 import {
   AuthScreen,
   CartScreen,
   CheckoutScreen,
+  AccountScreen,
   CollectionScreen,
+  EditProfileScreen,
+  FavoritesScreen,
   HomeScreen,
+  NotificationsScreen,
+  OrderDeliveredScreen,
+  OrdersScreen,
   OrderSuccessScreen,
+  OrderTrackingScreen,
   ProductDetailsScreen,
   ReelsScreen,
   SearchScreen,
@@ -29,12 +39,55 @@ import {
 } from './screens/CustomerScreens';
 
 const bottomTabs = [
-  { key: 'account', label: 'حسابي', icon: Icons.User, screen: 'auth' },
-  { key: 'cart', label: 'السلة', icon: Icons.ShoppingCart, image: tabCartImage, screen: 'cart' },
+  { key: 'account', label: 'حسابي', icon: Icons.User, screen: 'account' },
+  { key: 'cart', label: 'السلة', icon: Icons.ShoppingCart, screen: 'cart' },
   { key: 'reels', label: 'خان', icon: Icons.Video, screen: 'reels', center: true },
-  { key: 'shop', label: 'تسوق', icon: Icons.Search, image: tabShopImage, screen: 'search' },
+  { key: 'shop', label: 'تسوق', icon: Icons.Search, screen: 'search' },
   { key: 'home', label: 'الرئيسية', icon: Icons.Home, screen: 'home' },
 ];
+
+function CartTabIcon({ size = 21, color = palette.green }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4.8 5.8h2.1l1.6 8.6h8.5c1 0 1.8-.7 2.1-1.7l1-4.4H8.1"
+        stroke={color}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="10.2" cy="18.3" r="1.2" fill={color} />
+      <Circle cx="17.1" cy="18.3" r="1.2" fill={color} />
+    </Svg>
+  );
+}
+
+function ShopTabIcon({ size = 21, color = palette.muted }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M5.2 8.2h5.9"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M3.8 11.8h7.1"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M9.2 5.1a7 7 0 1 1 2.2 13.6"
+        stroke={color}
+        strokeWidth={2.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M17 17l3.2 3.2" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  );
+}
 
 function BottomNav({ screen, onChange, cartCount }) {
   return (
@@ -48,8 +101,10 @@ function BottomNav({ screen, onChange, cartCount }) {
             onPress={() => onChange(item.screen)}
           >
             <View style={[item.center ? styles.centerButton : styles.navIconWrap, active && styles.navIconActive]}>
-              {item.image ? (
-                <Image source={item.image} style={[styles.bottomImageIcon, active && styles.bottomImageIconActive]} />
+              {item.key === 'cart' ? (
+                <CartTabIcon size={21} color={palette.green} />
+              ) : item.key === 'shop' ? (
+                <ShopTabIcon size={21} color={active ? palette.green : palette.muted} />
               ) : (
                 <AppIcon icon={item.icon} size={item.center ? 23 : 21} color={active || item.center ? palette.green : palette.muted} />
               )}
@@ -59,7 +114,7 @@ function BottomNav({ screen, onChange, cartCount }) {
                 </View>
               ) : null}
             </View>
-            {!item.center && !item.image ? (
+            {!item.center ? (
               <RText style={[styles.bottomLabel, active && styles.bottomLabelActive]}>{item.label}</RText>
             ) : null}
           </TouchableOpacity>
@@ -78,11 +133,153 @@ function normalizeHomePayload(home, productsResponse) {
     products: products.map(normalizeProduct),
     reels: (home?.latestReels || []).map(normalizeReel),
     coupons: (home?.coupons || []).map(normalizeCoupon),
+    banners: (home?.banners || []).map(normalizeBanner).filter(Boolean),
   };
 }
 
 function canSyncProduct(product) {
   return Boolean(product?.raw?.id && product?.id);
+}
+
+const FAVORITES_KEY = 'khan.customer.favorites';
+const ONBOARDING_KEY = 'khan.customer.onboarding.done';
+const swipeScreens = ['account', 'cart', 'reels', 'search', 'home'];
+
+const onboardingSlides = [
+  {
+    id: 'discover',
+    image: onboardingShoppingImage,
+    title: 'اكتشف عالم التسوق الأقرب إليك',
+    body: 'آلاف المنتجات والمتاجر والعروض بمكان واحد.',
+  },
+  {
+    id: 'simple',
+    image: onboardingDeliveryImage,
+    title: 'كل ما تحتاجه... بخطوات بسيطة',
+    body: 'اطلب من متاجرك المفضلة وتتبع طلباتك بسهولة.',
+  },
+  {
+    id: 'reels',
+    image: onboardingReelsImage,
+    title: 'شاهد المنتجات بالفيديو قبل الشراء',
+    body: 'تصفح ريلز قصيرة واكتشف أفضل العروض بسهولة.',
+  },
+];
+
+function readLocalFavorites() {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(FAVORITES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalFavorites(favorites) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
+}
+
+function writeOnboardingDone() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ONBOARDING_KEY, '1');
+}
+
+function OnboardingScreen({ onLogin, onSignup, onGuest }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [sliderWidth, setSliderWidth] = useState(1);
+  const { height } = useWindowDimensions();
+  const scrollRef = useRef(null);
+  const imageHeight = Math.min(250, Math.max(150, height * 0.3));
+  const goTo = (index) => {
+    const next = Math.max(0, Math.min(onboardingSlides.length - 1, index));
+    setActiveIndex(next);
+    scrollRef.current?.scrollTo({ x: next * sliderWidth, animated: true });
+  };
+
+  return (
+    <View style={styles.onboardingScreen}>
+      <View style={styles.onboardingTop}>
+        <TouchableOpacity style={styles.guestLink} onPress={onGuest}>
+          <AppIcon icon={Icons.ChevronLeft} size={17} color={palette.green} />
+          <RText style={styles.guestLinkText}>أكمل التسوق كزائر</RText>
+        </TouchableOpacity>
+      </View>
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        style={styles.onboardingPager}
+        contentContainerStyle={styles.onboardingPagerContent}
+        onLayout={(event) => setSliderWidth(event.nativeEvent.layout.width || 1)}
+        onMomentumScrollEnd={(event) => {
+          const width = event.nativeEvent.layoutMeasurement.width || 1;
+          setActiveIndex(Math.round(event.nativeEvent.contentOffset.x / width));
+        }}
+      >
+        {onboardingSlides.map((slide) => (
+          <View key={slide.id} style={[styles.onboardingSlide, { width: sliderWidth }]}>
+            <Image source={slide.image} style={[styles.onboardingImage, { height: imageHeight }]} resizeMode="contain" />
+            <RText style={styles.onboardingTitle}>{slide.title}</RText>
+            <RText style={styles.onboardingBody}>{slide.body}</RText>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={styles.onboardingActions}>
+        <TouchableOpacity style={styles.onboardingLoginButton} onPress={onLogin}>
+          <RText style={styles.onboardingLoginText}>تسجيل دخول</RText>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.onboardingSignupButton} onPress={onSignup}>
+          <RText style={styles.onboardingSignupText}>إنشاء حساب</RText>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.onboardingFooter}>
+        <TouchableOpacity
+          style={[styles.onboardingArrow, activeIndex === 0 && styles.onboardingArrowDisabled]}
+          onPress={() => goTo(activeIndex - 1)}
+        >
+          <AppIcon icon={Icons.ChevronLeft} size={20} color={activeIndex === 0 ? palette.muted : palette.green} />
+        </TouchableOpacity>
+        <View style={styles.onboardingDots}>
+          {onboardingSlides.map((slide, index) => (
+            <View key={`dot-${slide.id}`} style={[styles.onboardingDot, activeIndex === index && styles.onboardingDotActive]} />
+          ))}
+        </View>
+        <TouchableOpacity
+          style={[styles.onboardingArrow, styles.onboardingArrowActive, activeIndex === onboardingSlides.length - 1 && styles.onboardingArrowDisabled]}
+          onPress={() => goTo(activeIndex + 1)}
+        >
+          <AppIcon icon={Icons.ChevronRight} size={20} color={activeIndex === onboardingSlides.length - 1 ? palette.muted : palette.white} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+async function copyText(text) {
+  if (!text) return false;
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  if (typeof document === 'undefined') return false;
+
+  const input = document.createElement('textarea');
+  input.value = text;
+  input.setAttribute('readonly', '');
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(input);
+  return copied;
 }
 
 export default function PhoneExperience() {
@@ -103,13 +300,27 @@ export default function PhoneExperience() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedReel, setSelectedReel] = useState(null);
   const [cart, setCart] = useState([]);
-  const [favorites, setFavorites] = useState([]);
+  const [cartCouponCode, setCartCouponCode] = useState('');
+  const [favorites, setFavorites] = useState(() => (authApi.getSession('customer') ? readLocalFavorites() : []));
+  const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState('');
   const [session, setSession] = useState(() => authApi.getSession('customer'));
+  const [rememberedCustomer, setRememberedCustomer] = useState(() => authApi.getRememberedCustomer());
+  const [showOnboarding, setShowOnboarding] = useState(() => !authApi.getSession('customer'));
+  const [authInitialMode, setAuthInitialMode] = useState('login');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [lastOrder, setLastOrder] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [confirmingDelivery, setConfirmingDelivery] = useState(false);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [swipeStart, setSwipeStart] = useState(null);
 
   const loadCatalog = async () => {
     setCatalogLoading(true);
@@ -137,12 +348,44 @@ export default function PhoneExperience() {
     }
   };
 
+  const loadFavorites = async () => {
+    if (!authApi.getSession('customer')) {
+      setFavorites([]);
+      return;
+    }
+
+    try {
+      const remoteFavorites = await favoritesApi.list();
+      const remoteIds = Array.from(new Set((remoteFavorites || []).map((item) => item.productId || item.product?.id).filter(Boolean)));
+      setFavorites(remoteIds);
+      writeLocalFavorites(remoteIds);
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
+  const loadNotifications = async () => {
+    if (!authApi.getSession('customer')) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      const remoteNotifications = await notificationsApi.list();
+      setNotifications(remoteNotifications || []);
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
   useEffect(() => {
     loadCatalog();
   }, []);
 
   useEffect(() => {
     loadCart();
+    loadFavorites();
+    loadNotifications();
   }, [session]);
 
   useEffect(() => {
@@ -151,29 +394,26 @@ export default function PhoneExperience() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const syncOrUpdateLocalCart = async (product, quantity = 1) => {
-    setCart((current) => {
-      const key = product.id || product.title;
-      const existing = current.find((item) => (item.product.id || item.product.title) === key);
-      if (existing) {
-        return current.map((item) =>
-          (item.product.id || item.product.title) === key
-            ? { ...item, quantity: item.quantity + quantity }
-            : item,
-        );
-      }
-      return [...current, { product, quantity }];
-    });
+  const requireCustomerSession = (message = 'سجل دخولك لإضافة المنتجات إلى السلة') => {
+    if (session) return true;
+    setAuthInitialMode('login');
+    setToast(message);
+    setScreen('auth');
+    return false;
+  };
 
-    if (!session || !canSyncProduct(product)) {
-      setToast('تمت الإضافة إلى السلة المحلية');
+  const syncOrUpdateLocalCart = async (product, quantity = 1) => {
+    if (!requireCustomerSession()) return;
+
+    if (!canSyncProduct(product)) {
+      setToast('لا يمكن إضافة هذا المنتج حالياً');
       return;
     }
 
     try {
       const remoteCart = await cartApi.addItem(product.id, quantity);
       setCart(normalizeCart(remoteCart));
-      setToast('تمت مزامنة السلة مع الباك إند');
+      setToast('تمت إضافة المنتج إلى السلة');
     } catch (error) {
       setToast(error.message);
     }
@@ -219,11 +459,45 @@ export default function PhoneExperience() {
     setToast('تم حذف المنتج من السلة');
   };
 
-  const toggleFavorite = (product) => {
+  const toggleFavorite = async (product) => {
+    if (!session) {
+      setAuthInitialMode('login');
+      setToast('سجل دخولك لحفظ المنتج في المفضلة');
+      setScreen('auth');
+      return;
+    }
+
     const key = product.id || product.title;
-    setFavorites((current) =>
-      current.includes(key) ? current.filter((title) => title !== key) : [...current, key],
-    );
+    const wasFavorite = favorites.includes(key);
+    const nextFavorites = wasFavorite
+      ? favorites.filter((favorite) => favorite !== key)
+      : [...favorites, key];
+
+    setFavorites(nextFavorites);
+    writeLocalFavorites(nextFavorites);
+
+    if (!product.id) return;
+
+    try {
+      if (wasFavorite) {
+        await favoritesApi.remove(product.id);
+      } else {
+        await favoritesApi.add(product.id);
+      }
+    } catch (error) {
+      setToast(error.message);
+    }
+  };
+
+  const markAllNotificationsRead = async () => {
+    setNotifications((current) => current.map((item) => ({ ...item, readAt: item.readAt || new Date().toISOString() })));
+    if (!session) return;
+
+    try {
+      await notificationsApi.markAllRead();
+    } catch (error) {
+      setToast(error.message);
+    }
   };
 
   const openProduct = (product) => {
@@ -283,11 +557,32 @@ export default function PhoneExperience() {
     }
   };
 
+  const copyCoupon = async (code) => {
+    try {
+      const copied = await copyText(code);
+      setToast(copied ? 'تم نسخ الكوبون' : 'تعذر نسخ الكوبون');
+    } catch (error) {
+      setToast('تعذر نسخ الكوبون');
+    }
+  };
+
+  const applyCartCoupon = (code) => {
+    if (!code) {
+      setCartCouponCode('');
+      setToast('الكوبون غير صالح لهذه السلة');
+      return;
+    }
+
+    setCartCouponCode(code);
+    setToast('تم تطبيق الكوبون');
+  };
+
   const handleLogin = async (payload) => {
     setAuthLoading(true);
     setAuthError('');
     try {
-      const nextSession = await authApi.login(payload, 'customer');
+      const { remember, ...credentials } = payload;
+      const nextSession = await authApi.login(credentials, 'customer');
       const role = nextSession?.user?.role;
 
       if (role === 'ADMIN' || role === 'OPS') {
@@ -302,6 +597,19 @@ export default function PhoneExperience() {
         authApi.setSession(nextSession, 'merchant');
         if (typeof window !== 'undefined') window.location.assign('/dashboard/merchant');
         return;
+      }
+
+      if (remember) {
+        const account = {
+          phone: credentials.phone,
+          firstName: nextSession?.user?.firstName || '',
+          lastName: nextSession?.user?.lastName || '',
+        };
+        authApi.setRememberedCustomer(account);
+        setRememberedCustomer(account);
+      } else {
+        authApi.clearRememberedCustomer();
+        setRememberedCustomer(null);
       }
 
       setSession(nextSession);
@@ -372,18 +680,42 @@ export default function PhoneExperience() {
     authApi.clearSession('customer');
     setSession(null);
     setCart([]);
+    setFavorites([]);
+    writeLocalFavorites([]);
     setToast('تم تسجيل الخروج');
   };
 
+  const handleUpdateProfile = async (payload) => {
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const user = await authApi.updateProfile(payload, 'customer');
+      const nextSession = { ...session, user };
+      authApi.setSession(nextSession, 'customer');
+      setSession(nextSession);
+      setToast('تم حفظ التغييرات');
+      setScreen('account');
+    } catch (error) {
+      setProfileError(error.message);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const finishOnboarding = (nextScreen = 'home', nextAuthMode = 'login') => {
+    writeOnboardingDone();
+    setShowOnboarding(false);
+    setAuthInitialMode(nextAuthMode);
+    setScreen(nextScreen);
+  };
+
   const completeCheckout = async (payload) => {
+    if (!requireCustomerSession('سجل دخولك لإتمام الطلب')) return;
+
     setCheckoutLoading(true);
     try {
-      if (session) {
-        const order = await ordersApi.checkout(payload);
-        setLastOrder(order);
-      } else {
-        setLastOrder({ number: `LOCAL-${Date.now().toString().slice(-6)}` });
-      }
+      const order = await ordersApi.checkout(payload);
+      setLastOrder(order);
       setCart([]);
       setScreen('success');
     } catch (error) {
@@ -393,12 +725,130 @@ export default function PhoneExperience() {
     }
   };
 
+  const loadOrders = async () => {
+    if (!authApi.getSession('customer')) {
+      setOrders([]);
+      return;
+    }
+
+    setOrdersLoading(true);
+    setOrdersError('');
+    try {
+      const remoteOrders = await ordersApi.mine();
+      setOrders(remoteOrders || []);
+    } catch (error) {
+      setOrdersError(error.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const openOrders = () => {
+    if (!session) {
+      setAuthInitialMode('login');
+      setScreen('auth');
+      return;
+    }
+    setScreen('orders');
+    loadOrders();
+  };
+
+  const openOrder = async (order) => {
+    setSelectedOrder(order);
+    setScreen('orderTracking');
+
+    if (!order?.id || !session) return;
+    try {
+      const fresh = await ordersApi.get(order.id);
+      setSelectedOrder(fresh);
+      setOrders((current) => current.map((item) => (item.id === fresh.id ? fresh : item)));
+    } catch {
+      // keep the list snapshot if the refresh fails
+    }
+  };
+
+  const handleConfirmDelivery = async (order) => {
+    if (!order?.id || confirmingDelivery) return;
+
+    if (order.status === 'DELIVERED') {
+      setScreen('orderDelivered');
+      return;
+    }
+
+    setConfirmingDelivery(true);
+    try {
+      const updated = await ordersApi.confirmDelivery(order.id);
+      setSelectedOrder(updated);
+      setOrders((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setScreen('orderDelivered');
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setConfirmingDelivery(false);
+    }
+  };
+
+  const handleReorder = async (order) => {
+    if (!requireCustomerSession('سجل دخولك لإضافة منتجات الطلب إلى السلة')) return;
+
+    const items = (order?.items || []).filter((item) => item.productId);
+    if (!items.length) {
+      setToast('لا يمكن إعادة هذا الطلب');
+      return;
+    }
+
+    let added = 0;
+    for (const item of items) {
+      try {
+        const remoteCart = await cartApi.addItem(item.productId, item.quantity || 1);
+        setCart(normalizeCart(remoteCart));
+        added += 1;
+      } catch {
+        // skip items that are no longer available
+      }
+    }
+
+    if (added > 0) {
+      setToast('تمت إضافة منتجات الطلب إلى السلة');
+      setScreen('cart');
+    } else {
+      setToast('منتجات هذا الطلب لم تعد متوفرة');
+    }
+  };
+
+  const handleSubmitReview = async (payload) => {
+    if (!payload?.orderId || reviewSubmitting) return;
+    setReviewSubmitting(true);
+    try {
+      await reviewsApi.create(payload);
+      setToast('شكرًا لك! تم إرسال تقييمك');
+      setScreen('home');
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
   const sharedProductProps = {
     onOpenProduct: openProduct,
     onAddToCart: addToCart,
     onToggleFavorite: toggleFavorite,
     favorites,
   };
+  const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
+
+  if (showOnboarding && !session) {
+    return (
+      <View style={styles.phoneFrame}>
+        <OnboardingScreen
+          onGuest={() => finishOnboarding('home')}
+          onLogin={() => finishOnboarding('auth', 'login')}
+          onSignup={() => finishOnboarding('auth', 'signup')}
+        />
+      </View>
+    );
+  }
 
   const content = {
     home: (
@@ -409,8 +859,68 @@ export default function PhoneExperience() {
         error={catalogError}
         onRetry={loadCatalog}
         onSearch={handleSearch}
+        onOpenFavorites={() => setScreen('favorites')}
+        onOpenNotifications={() => setScreen('notifications')}
         onOpenReel={openReel}
         onShowAll={(type) => openCollection(type, 'home')}
+        onCopyCoupon={copyCoupon}
+        notificationCount={notifications.filter((item) => !item.readAt).length}
+      />
+    ),
+    favorites: (
+      <FavoritesScreen
+        products={catalog.products || []}
+        favorites={favorites}
+        onBack={() => setScreen('home')}
+        onOpenProduct={openProduct}
+        onAddToCart={addToCart}
+        onToggleFavorite={toggleFavorite}
+      />
+    ),
+    notifications: (
+      <NotificationsScreen
+        notifications={notifications}
+        onBack={() => setScreen('home')}
+        onMarkAllRead={markAllNotificationsRead}
+      />
+    ),
+    account: (
+      <AccountScreen
+        session={session}
+        catalog={catalog}
+        loading={catalogLoading}
+        error={catalogError}
+        onRetry={loadCatalog}
+        favorites={favorites}
+        onOpenProduct={openProduct}
+        onAddToCart={addToCart}
+        onToggleFavorite={toggleFavorite}
+        onOpenAuth={(mode = 'login') => {
+          setAuthInitialMode(mode);
+          setScreen('auth');
+        }}
+        onOpenFavorites={() => setScreen('favorites')}
+        onOpenNotifications={() => setScreen('notifications')}
+        onOpenOrders={openOrders}
+        onOpenCoupons={() => openCollection('coupons', 'account')}
+        onShowAll={(type) => openCollection(type, 'account')}
+        onOpenSavedStores={() => setToast('المتاجر المحفوظة قريبًا')}
+        onOpenSupport={() => setToast('المساعدة والدعم قريبًا')}
+        onOpenAbout={() => setToast('خان — تسوّق محلي بكل سهولة')}
+        onEditProfile={() => {
+          setProfileError('');
+          setScreen('editProfile');
+        }}
+        onLogout={handleLogout}
+      />
+    ),
+    editProfile: (
+      <EditProfileScreen
+        session={session}
+        saving={profileSaving}
+        error={profileError}
+        onSave={handleUpdateProfile}
+        onBack={() => setScreen('account')}
       />
     ),
     search: (
@@ -440,6 +950,7 @@ export default function PhoneExperience() {
         onRetry={() => openCollection(collectionType, collectionBackScreen)}
         onBack={() => setScreen(collectionBackScreen)}
         onOpenReel={openReel}
+        onCopyCoupon={copyCoupon}
       />
     ),
     reels: <ReelsScreen reel={selectedReel} onAddToCart={addToCart} onBack={() => setScreen('home')} />,
@@ -448,6 +959,8 @@ export default function PhoneExperience() {
         session={session}
         authLoading={authLoading}
         authError={authError}
+        rememberedAccount={rememberedCustomer}
+        initialMode={authInitialMode}
         onLogin={handleLogin}
         onRegister={handleRegister}
         onVerifyRegister={handleVerifyRegister}
@@ -459,21 +972,67 @@ export default function PhoneExperience() {
     cart: (
       <CartScreen
         cart={cart}
+        session={session}
+        catalog={catalog}
+        loading={catalogLoading}
+        error={catalogError}
+        favorites={favorites}
+        coupons={catalog.coupons || []}
+        couponCode={cartCouponCode}
+        onApplyCoupon={applyCartCoupon}
         onUpdateQuantity={updateQuantity}
         onRemove={removeFromCart}
         onContinueShopping={() => setScreen('home')}
+        onLogin={() => {
+          setAuthInitialMode('login');
+          setScreen('auth');
+        }}
+        onOpenProduct={openProduct}
+        onAddToCart={addToCart}
+        onToggleFavorite={toggleFavorite}
+        onShowAll={(type) => openCollection(type, 'cart')}
+        onRetry={loadCatalog}
         onCheckout={() => setScreen('checkout')}
       />
     ),
     checkout: (
       <CheckoutScreen
         cart={cart}
+        couponCode={cartCouponCode}
+        coupons={catalog.coupons || []}
         onBack={() => setScreen('cart')}
         onComplete={completeCheckout}
         submitting={checkoutLoading}
       />
     ),
     success: <OrderSuccessScreen order={lastOrder} onHome={() => setScreen('home')} />,
+    orders: (
+      <OrdersScreen
+        orders={orders}
+        loading={ordersLoading}
+        error={ordersError}
+        onBack={() => setScreen('account')}
+        onOpenOrder={openOrder}
+        onReorder={handleReorder}
+      />
+    ),
+    orderTracking: (
+      <OrderTrackingScreen
+        order={selectedOrder}
+        confirming={confirmingDelivery}
+        onBack={() => setScreen('orders')}
+        onConfirmDelivery={handleConfirmDelivery}
+        onSupport={() => setToast('المساعدة والدعم قريبًا')}
+      />
+    ),
+    orderDelivered: (
+      <OrderDeliveredScreen
+        order={selectedOrder}
+        submitting={reviewSubmitting}
+        onSubmitReview={handleSubmitReview}
+        onHome={() => setScreen('home')}
+      />
+    ),
     product: (
       <ProductDetailsScreen
         product={selectedProduct}
@@ -486,18 +1045,44 @@ export default function PhoneExperience() {
     ),
   }[screen];
 
-  const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
+  const handleSwipeRelease = (event) => {
+    if (!swipeStart || !swipeScreens.includes(screen)) {
+      setSwipeStart(null);
+      return;
+    }
+
+    const touch = event.nativeEvent.changedTouches?.[0];
+    const endX = touch?.pageX ?? event.nativeEvent.pageX;
+    const deltaX = endX - swipeStart.x;
+    setSwipeStart(null);
+    if (Math.abs(deltaX) < 70) return;
+
+    const currentIndex = swipeScreens.indexOf(screen);
+    const nextIndex = deltaX > 0
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(swipeScreens.length - 1, currentIndex + 1);
+    if (nextIndex !== currentIndex) setScreen(swipeScreens[nextIndex]);
+  };
 
   return (
     <View style={styles.phoneFrame}>
-      <View style={styles.phoneContent}>{content}</View>
+      <View
+        style={styles.phoneContent}
+        onTouchStart={(event) => {
+          const touch = event.nativeEvent.changedTouches?.[0];
+          setSwipeStart({ x: touch?.pageX ?? event.nativeEvent.pageX });
+        }}
+        onTouchEnd={handleSwipeRelease}
+      >
+        {content}
+      </View>
       {toast ? (
         <View style={styles.toast}>
           <AppIcon icon={Icons.CircleCheck} size={18} color={palette.white} />
           <RText style={styles.toastText}>{toast}</RText>
         </View>
       ) : null}
-      {!['reels', 'cart'].includes(screen) ? (
+      {screen !== 'reels' && !(screen === 'cart' && session) ? (
         <BottomNav screen={screen} onChange={setScreen} cartCount={cartCount} />
       ) : null}
     </View>

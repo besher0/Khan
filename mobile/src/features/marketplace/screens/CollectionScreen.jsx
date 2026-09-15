@@ -16,6 +16,7 @@ export function CollectionScreen({
   onAddToCart,
   onToggleFavorite,
   onOpenReel,
+  onCopyCoupon,
   favorites,
 }) {
   const { productCardStyle, collectionCardStyle } = useMarketplaceLayout();
@@ -69,7 +70,7 @@ export function CollectionScreen({
         <View style={styles.collectionGrid}>
           {coupons.map((coupon, index) => (
             <View key={`all-coupon-${coupon.id || coupon.code || index}`} style={[styles.collectionCouponTile, collectionCardStyle]}>
-              <CouponCard coupon={coupon} index={index} style={styles.collectionCouponCard} />
+              <CouponCard coupon={coupon} index={index} style={styles.collectionCouponCard} onCopy={onCopyCoupon} />
             </View>
           ))}
         </View>

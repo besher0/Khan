@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@200..1000&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -13,8 +15,16 @@ body,
 }
 
 body {
+  font-family: 'Cairo', Arial, sans-serif;
   overflow: hidden;
   background: #f7f8f6;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
 }
 
 #root {

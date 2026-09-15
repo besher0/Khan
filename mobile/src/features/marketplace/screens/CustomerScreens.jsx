@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ImageBackground, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { styles } from '../theme/styles';
 import * as Icons from '../../../../icons';
@@ -8,9 +8,9 @@ import {
   ProductCard,
   RText,
   ReelCard,
+  RtlHorizontalScroll,
   SectionTitle,
   formatSyp,
-  images,
   palette,
 } from '../shared/marketplaceShared';
 export { HomeScreen } from './HomeScreen';
@@ -19,17 +19,90 @@ export { StoreScreen } from './StoreScreen';
 export { CollectionScreen } from './CollectionScreen';
 export { ProductDetailsScreen } from './ProductDetailsScreen';
 export { ReelsScreen } from './ReelsScreen';
+import emptyBasketImage from '../../../../assets/empty-basket.jpg';
+import emptyCartGuestImage from '../../../../assets/empty-cart-guest.png';
+import guestMascotImage from '../../../../assets/guest-mascot.png';
+import reviewMascotImage from '../../../../assets/review-mascot.jpg';
+import { uploadsApi } from '../../../services/api';
 import { DataNotice, listOrEmpty, ScreenScroll, useMarketplaceLayout } from './screenShared.jsx';
+
+export function FavoritesScreen({
+  products = [],
+  favorites = [],
+  onBack,
+  onOpenProduct,
+  onAddToCart,
+  onToggleFavorite,
+}) {
+  const favoriteProducts = products.filter((product) => favorites.includes(product.id || product.title));
+  const { productCardStyle } = useMarketplaceLayout();
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>المحفوظات</RText>
+        <View style={styles.detailsTopButton} />
+      </View>
+      {favoriteProducts.length ? (
+        <View style={styles.productGrid}>
+          {favoriteProducts.map((product) => (
+            <ProductCard
+              key={`favorite-${product.id || product.title}`}
+              product={product}
+              style={productCardStyle}
+              showcase
+              onOpen={onOpenProduct}
+              onAddToCart={onAddToCart}
+              onToggleFavorite={onToggleFavorite}
+              isFavorite
+            />
+          ))}
+        </View>
+      ) : (
+        <RText style={styles.collectionEmpty}>لا توجد منتجات محفوظة حاليًا.</RText>
+      )}
+    </ScreenScroll>
+  );
+}
+
+export function NotificationsScreen({ notifications = [], onBack, onMarkAllRead }) {
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>الإشعارات</RText>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onMarkAllRead}>
+          <AppIcon icon={Icons.CheckCheck || Icons.Check} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+      </View>
+      {notifications.length ? (
+        <View style={styles.notificationList}>
+          {notifications.map((item) => (
+            <View key={item.id || `${item.title}-${item.createdAt}`} style={styles.notificationItem}>
+              <View style={[styles.notificationDot, item.readAt && styles.notificationDotRead]} />
+              <View style={styles.notificationBody}>
+                <RText style={styles.notificationTitle}>{item.title}</RText>
+                <RText style={styles.notificationText}>{item.body}</RText>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <RText style={styles.collectionEmpty}>لا توجد إشعارات حاليًا.</RText>
+      )}
+    </ScreenScroll>
+  );
+}
 
 
 function formatCartSyp(value) {
   const amount = Number(value) || 0;
   return `${new Intl.NumberFormat('en-US').format(amount).replace(/,/g, '.')} ل.س`;
-}
-
-function formatCartUsd(value) {
-  const amount = Number(value) || 0;
-  return `$ ${new Intl.NumberFormat('en-US').format(amount).replace(/,/g, '.')}`;
 }
 
 function CartCheckmark() {
@@ -45,19 +118,52 @@ function CartSummaryRow({ label, value, strong = false }) {
   );
 }
 
-function CartCouponBanner() {
+function calculateCartCouponDiscount(coupon, subtotal) {
+  if (!coupon || subtotal <= 0) return 0;
+
+  const raw = coupon.raw || coupon;
+  const minOrderAmount = Number(raw.minOrderAmount || 0);
+  if (minOrderAmount && subtotal < minOrderAmount) return 0;
+
+  const value = Number(raw.value || 0);
+  const discount = raw.type === 'PERCENT' ? Math.floor((subtotal * value) / 100) : value;
+  const maxDiscountAmount = Number(raw.maxDiscountAmount || 0);
+  return Math.min(subtotal, maxDiscountAmount ? Math.min(discount, maxDiscountAmount) : discount);
+}
+
+function CartCouponBanner({ coupons = [], subtotal, appliedCouponCode, onApplyCoupon }) {
+  const [couponCode, setCouponCode] = useState(appliedCouponCode || '');
+  const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === appliedCouponCode?.toUpperCase());
+
+  const applyCoupon = () => {
+    const code = couponCode.trim().toUpperCase();
+    const coupon = coupons.find((item) => item.code?.toUpperCase() === code);
+    const discount = calculateCartCouponDiscount(coupon, subtotal);
+    onApplyCoupon?.(coupon && discount > 0 ? code : '');
+  };
+
   return (
     <View style={styles.cartCouponBanner}>
       <View style={styles.cartCouponInfo}>
         <AppIcon icon={Icons.TicketPercent || Icons.Ticket || Icons.BadgePercent} size={33} color={palette.green} strokeWidth={2.3} />
         <View style={styles.cartCouponTextBlock}>
           <RText style={styles.cartCouponTitle}>لديك كوبون خصم؟</RText>
-          <RText style={styles.cartCouponSub}>اضف الكود للحصول على خصم اضافي</RText>
+          <TextInput
+            style={styles.cartCouponInput}
+            value={couponCode}
+            onChangeText={setCouponCode}
+            placeholder="أدخل كود الكوبون"
+            placeholderTextColor="#9AA4AD"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            textAlign="right"
+          />
+          {appliedCoupon ? <RText style={styles.cartCouponApplied}>تم تطبيق {appliedCoupon.code}</RText> : null}
         </View>
       </View>
-      <TouchableOpacity style={styles.cartCouponAction}>
+      <TouchableOpacity style={styles.cartCouponAction} onPress={applyCoupon}>
         <AppIcon icon={Icons.ChevronLeft} size={16} color={palette.amber} />
-        <RText style={styles.cartCouponActionText}>إضافة كود</RText>
+        <RText style={styles.cartCouponActionText}>{appliedCoupon ? 'تحديث' : 'إضافة كود'}</RText>
       </TouchableOpacity>
     </View>
   );
@@ -80,7 +186,7 @@ function CartQuantityControl({ product, quantity, id, onUpdateQuantity }) {
 function CartProductItem({ item, onUpdateQuantity }) {
   const { id, product, quantity } = item;
   const price = Number(product.priceValue || 0) * quantity;
-  const oldPrice = Number(product.oldPriceValue || product.compareAtPrice || product?.raw?.compareAtPrice || 0) || price + 5000;
+  const oldPrice = Number(product.oldPriceValue || product.compareAtPrice || product?.raw?.compareAtPrice || 0) * quantity;
 
   return (
     <View style={styles.cartItem}>
@@ -100,12 +206,11 @@ function CartProductItem({ item, onUpdateQuantity }) {
           <View style={styles.cartStoreAvatar}>
             {product.image ? <Image source={product.image} style={styles.cartStoreAvatarImage} /> : null}
           </View>
-          <RText numberOfLines={1} style={styles.cartItemStore}>{product.store || 'متجر الشريحة الذكية'}</RText>
+          <RText numberOfLines={1} style={styles.cartItemStore}>{product.store || 'المتجر'}</RText>
         </View>
-        <RText style={styles.cartItemColor}>اللون: أزرق</RText>
         <View style={styles.cartPriceRow}>
           <RText style={styles.cartItemPrice}>{formatCartSyp(price)}</RText>
-          <RText style={styles.cartOldPrice}>{formatCartSyp(oldPrice)}</RText>
+          {oldPrice > price ? <RText style={styles.cartOldPrice}>{formatCartSyp(oldPrice)}</RText> : null}
         </View>
         <CartQuantityControl product={product} quantity={quantity} id={id} onUpdateQuantity={onUpdateQuantity} />
       </View>
@@ -113,15 +218,18 @@ function CartProductItem({ item, onUpdateQuantity }) {
   );
 }
 
-function CartOrderSummary({ subtotal, shippingCost, onCheckout }) {
+function CartOrderSummary({ subtotal, itemCount, shippingCost, discountTotal, onCheckout }) {
+  const total = Math.max(0, subtotal + shippingCost - discountTotal);
+
   return (
     <View style={styles.cartSummary}>
       <RText style={styles.cartSummaryTitle}>ملخص الطلب</RText>
       <View style={styles.cartSummaryDashed}>
-        <CartSummaryRow label="المجموع" value={formatCartUsd(shippingCost)} />
-        <CartSummaryRow label="وزن الصندوق" value="300 g" />
-        <CartSummaryRow label="كلفة الشحن" value={formatCartUsd(shippingCost)} />
-        <CartSummaryRow label="التكلفة الإجمالية" value={formatCartUsd(shippingCost || subtotal)} strong />
+        <CartSummaryRow label="عدد المنتجات" value={String(itemCount)} />
+        <CartSummaryRow label="قيمة المنتجات" value={formatCartSyp(subtotal)} />
+        {discountTotal > 0 ? <CartSummaryRow label="خصم الكوبون" value={`- ${formatCartSyp(discountTotal)}`} /> : null}
+        <CartSummaryRow label="كلفة الشحن" value={shippingCost ? formatCartSyp(shippingCost) : 'مجاني'} />
+        <CartSummaryRow label="التكلفة الإجمالية" value={formatCartSyp(total)} strong />
       </View>
       <TouchableOpacity style={styles.checkoutButton} onPress={onCheckout}>
         <RText style={styles.checkoutText}>تأكيد</RText>
@@ -130,7 +238,7 @@ function CartOrderSummary({ subtotal, shippingCost, onCheckout }) {
   );
 }
 
-function CartCheckoutSheet({ itemCount, subtotal, onCheckout }) {
+function CartCheckoutSheet({ itemCount, total, onCheckout }) {
   return (
     <View style={styles.cartCheckoutSheet}>
       <View style={styles.cartCheckoutMeta}>
@@ -138,7 +246,7 @@ function CartCheckoutSheet({ itemCount, subtotal, onCheckout }) {
           <CartCheckmark />
           <RText style={styles.cartSelectionTitle}>العناصر ({itemCount})</RText>
         </View>
-        <RText style={styles.cartCheckoutTotal}>{formatCartSyp(subtotal)}</RText>
+        <RText style={styles.cartCheckoutTotal}>{formatCartSyp(total)}</RText>
       </View>
       <TouchableOpacity style={styles.cartCheckoutButton} onPress={onCheckout}>
         <AppIcon icon={Icons.ShoppingCart} size={25} color={palette.white} strokeWidth={2.4} />
@@ -148,21 +256,95 @@ function CartCheckoutSheet({ itemCount, subtotal, onCheckout }) {
   );
 }
 
-export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShopping, onCheckout }) {
+export function CartScreen({
+  cart,
+  session,
+  catalog,
+  loading,
+  error,
+  favorites = [],
+  coupons = [],
+  couponCode,
+  onApplyCoupon,
+  onUpdateQuantity,
+  onRemove,
+  onContinueShopping,
+  onLogin,
+  onOpenProduct,
+  onAddToCart,
+  onToggleFavorite,
+  onShowAll,
+  onRetry,
+  onCheckout,
+}) {
   const [showOrderSummary, setShowOrderSummary] = useState(false);
+  const products = listOrEmpty(catalog?.products);
+  const guestProducts = products.slice(0, 6);
+  const { productCardStyle } = useMarketplaceLayout();
   const subtotal = useMemo(
     () => cart.reduce((total, item) => total + (item.product.priceValue || 0) * item.quantity, 0),
     [cart],
   );
-  const itemCount = cart.length;
-  const shippingCost = 3490;
+  const itemCount = cart.reduce((total, item) => total + item.quantity, 0);
+  const shippingCost = 0;
+  const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === couponCode?.toUpperCase());
+  const discountTotal = calculateCartCouponDiscount(appliedCoupon, subtotal);
+  const total = Math.max(0, subtotal + shippingCost - discountTotal);
+
+  if (!session) {
+    return (
+      <ScreenScroll>
+        <View style={styles.guestCartTopBar}>
+          <RText style={styles.guestCartHeader}>السلة (0)</RText>
+        </View>
+        <Image
+          source={emptyCartGuestImage}
+          style={styles.guestCartImage}
+          resizeMode="contain"
+        />
+        <RText style={styles.guestCartTitle}>السلة لديك فارغة</RText>
+        <View style={styles.guestCartActions}>
+          <TouchableOpacity style={[styles.guestCartButton, styles.guestCartLogin]} onPress={onLogin} activeOpacity={0.88}>
+            <RText style={[styles.guestCartButtonText, styles.guestCartLoginText]}>تسجيل دخول</RText>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.guestCartButton, styles.guestCartExplore]} onPress={onContinueShopping} activeOpacity={0.88}>
+            <RText style={styles.guestCartButtonText}>استكشف المتجر</RText>
+          </TouchableOpacity>
+        </View>
+
+        <DataNotice loading={loading} error={error} onRetry={onRetry} />
+
+        {guestProducts.length ? (
+          <>
+            <SectionTitle title="الأكثر مبيعا" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+            <RtlHorizontalScroll refreshKey={`guest-cart-products-${guestProducts.length}`} contentContainerStyle={styles.horizontalCards}>
+              {guestProducts.map((product) => (
+                <ProductCard
+                  key={`guest-cart-${product.id || product.title}`}
+                  product={product}
+                  style={[productCardStyle, styles.accountGuestProductCard]}
+                  showcase
+                  onOpen={onOpenProduct}
+                  onAddToCart={onAddToCart}
+                  onToggleFavorite={onToggleFavorite}
+                  isFavorite={favorites.includes(product.id || product.title)}
+                />
+              ))}
+            </RtlHorizontalScroll>
+          </>
+        ) : null}
+      </ScreenScroll>
+    );
+  }
 
   if (!cart.length) {
     return (
       <View style={styles.emptyCart}>
-        <View style={styles.emptyCartIcon}>
-          <AppIcon icon={Icons.ShoppingCart} size={38} color={palette.green} />
-        </View>
+        <Image
+          source={emptyBasketImage}
+          style={styles.emptyCartMascot}
+          resizeMode="contain"
+        />
         <RText style={styles.emptyCartTitle}>سلتك فارغة</RText>
         <RText style={styles.emptyCartText}>أضف منتجاتك المفضلة وسنحتفظ بها هنا.</RText>
         <TouchableOpacity style={styles.emptyCartButton} onPress={onContinueShopping}>
@@ -179,7 +361,7 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
         contentContainerStyle={[styles.cartContent, showOrderSummary && styles.cartContentSummaryStep]}
       >
         <View style={styles.cartTopBar}>
-          <RText style={styles.cartMiniTitle}>السلة</RText>
+          {/* <RText style={styles.cartMiniTitle}>السلة</RText> */}
           <TouchableOpacity style={styles.cartBackButton} onPress={onContinueShopping}>
             <AppIcon icon={Icons.ChevronRight} size={23} color={palette.green} strokeWidth={2.5} />
           </TouchableOpacity>
@@ -203,24 +385,38 @@ export function CartScreen({ cart, onUpdateQuantity, onRemove, onContinueShoppin
           <CartProductItem key={item.id || item.product.id || `${item.product.title}-${index}`} item={item} onUpdateQuantity={onUpdateQuantity} />
         ))}
 
-        <CartCouponBanner />
+        <CartCouponBanner
+          coupons={coupons}
+          subtotal={subtotal}
+          appliedCouponCode={couponCode}
+          onApplyCoupon={onApplyCoupon}
+        />
         {showOrderSummary ? (
-          <CartOrderSummary subtotal={subtotal} shippingCost={shippingCost} onCheckout={onCheckout} />
+          <CartOrderSummary
+            subtotal={subtotal}
+            itemCount={itemCount}
+            shippingCost={shippingCost}
+            discountTotal={discountTotal}
+            onCheckout={onCheckout}
+          />
         ) : null}
       </ScrollView>
       {!showOrderSummary ? (
-        <CartCheckoutSheet itemCount={itemCount} subtotal={subtotal} onCheckout={() => setShowOrderSummary(true)} />
+        <CartCheckoutSheet itemCount={itemCount} total={total} onCheckout={() => setShowOrderSummary(true)} />
       ) : null}
     </View>
   );
 }
 
-export function CheckoutScreen({ cart, onBack, onComplete, submitting }) {
+export function CheckoutScreen({ cart, couponCode, coupons = [], onBack, onComplete, submitting }) {
   const [payment, setPayment] = useState('COD');
-  const [city, setCity] = useState('دمشق');
-  const [address, setAddress] = useState('المالكي، الشارع الرئيسي');
-  const [phone, setPhone] = useState('0999000002');
+  const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
   const subtotal = cart.reduce((total, item) => total + (item.product.priceValue || 0) * item.quantity, 0);
+  const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === couponCode?.toUpperCase());
+  const discountTotal = calculateCartCouponDiscount(appliedCoupon, subtotal);
+  const total = Math.max(0, subtotal - discountTotal);
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.checkoutContent}>
@@ -274,13 +470,19 @@ export function CheckoutScreen({ cart, onBack, onComplete, submitting }) {
           <RText style={styles.cartSummaryValue}>{formatSyp(subtotal)}</RText>
           <RText style={styles.cartSummaryLabel}>قيمة المنتجات</RText>
         </View>
+        {discountTotal > 0 ? (
+          <View style={styles.cartSummaryLine}>
+            <RText style={styles.cartSummaryValue}>- {formatSyp(discountTotal)}</RText>
+            <RText style={styles.cartSummaryLabel}>خصم الكوبون</RText>
+          </View>
+        ) : null}
         <View style={styles.cartSummaryLine}>
           <RText style={styles.cartSummaryFree}>مجاني</RText>
           <RText style={styles.cartSummaryLabel}>التوصيل</RText>
         </View>
         <View style={styles.cartSummaryDivider} />
         <View style={styles.cartSummaryLine}>
-          <RText style={styles.cartTotalValue}>{formatSyp(subtotal)}</RText>
+          <RText style={styles.cartTotalValue}>{formatSyp(total)}</RText>
           <RText style={styles.cartTotalLabel}>الإجمالي النهائي</RText>
         </View>
       </View>
@@ -290,6 +492,7 @@ export function CheckoutScreen({ cart, onBack, onComplete, submitting }) {
         onPress={() =>
           onComplete({
             paymentMethod: payment,
+            couponCode: discountTotal > 0 ? couponCode : undefined,
             address: { label: 'المنزل', city, line1: address, phone },
           })
         }
@@ -320,13 +523,647 @@ export function OrderSuccessScreen({ order, onHome }) {
   );
 }
 
-function AuthField({ label, placeholder, icon, secure = false, leadingIcon, value, onChangeText }) {
+const ORDER_TABS = [
+  { key: 'all', label: 'الكل' },
+  { key: 'processing', label: 'قيد المعالجة' },
+  { key: 'done', label: 'تمت' },
+  { key: 'cancelled', label: 'ملغاة' },
+];
+
+const ORDER_TRACK_STEPS = [
+  { key: 'preparing', label: 'جارِ التجهيز' },
+  { key: 'ready', label: 'الطلب جاهز' },
+  { key: 'courier', label: 'مع الدلفري' },
+  { key: 'delivered', label: 'تم الاستلام' },
+];
+
+function orderTabOf(status) {
+  if (status === 'DELIVERED') return 'done';
+  if (status === 'CANCELLED') return 'cancelled';
+  return 'processing';
+}
+
+function orderStepIndex(status) {
+  switch (status) {
+    case 'READY_FOR_PICKUP':
+      return 1;
+    case 'OUT_FOR_DELIVERY':
+      return 2;
+    case 'DELIVERED':
+      return 3;
+    default:
+      return 0;
+  }
+}
+
+function formatOrderDate(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
+function formatOrderTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function orderItemsCount(order) {
+  return (order?.items || []).reduce((total, item) => total + (item.quantity || 0), 0);
+}
+
+function OrderStatusBadge({ status }) {
+  const tab = orderTabOf(status);
+  const config =
+    tab === 'done'
+      ? { icon: Icons.Check, background: palette.greenSoft, color: palette.green }
+      : tab === 'cancelled'
+        ? { icon: Icons.X, background: '#FDECEA', color: palette.danger }
+        : { icon: Icons.Clock3, background: palette.amberSoft, color: palette.amber };
+  return (
+    <View style={[styles.orderStatusBadge, { backgroundColor: config.background }]}>
+      <AppIcon icon={config.icon} size={15} color={config.color} strokeWidth={3} />
+    </View>
+  );
+}
+
+export function OrdersScreen({ orders = [], loading = false, error, onBack, onOpenOrder, onReorder, onLogin }) {
+  const [activeTab, setActiveTab] = useState('all');
+  const filtered = orders.filter((order) => activeTab === 'all' || orderTabOf(order.status) === activeTab);
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>طلباتي</RText>
+        <View style={styles.detailsTopSpacer} />
+      </View>
+
+      <View style={styles.ordersTabs}>
+        {ORDER_TABS.map((tab) => (
+          <TouchableOpacity key={tab.key} style={styles.ordersTab} onPress={() => setActiveTab(tab.key)}>
+            <RText style={[styles.ordersTabText, activeTab === tab.key && styles.ordersTabTextActive]}>
+              {tab.label}
+            </RText>
+            {activeTab === tab.key ? <View style={styles.ordersTabUnderline} /> : null}
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {loading ? (
+        <DataNotice title="جارٍ تحميل طلباتك..." />
+      ) : error ? (
+        <DataNotice title="تعذر تحميل الطلبات" body={error} />
+      ) : filtered.length === 0 ? (
+        <View style={styles.ordersEmpty}>
+          <Image source={emptyBasketImage} style={styles.ordersEmptyImage} resizeMode="contain" />
+          <RText style={styles.ordersEmptyTitle}>لا توجد طلبات هنا بعد</RText>
+          <RText style={styles.ordersEmptyText}>اطلب من متاجرك المفضلة وستظهر طلباتك في هذه الصفحة.</RText>
+          {onLogin ? (
+            <TouchableOpacity style={styles.ordersLoginButton} onPress={onLogin}>
+              <RText style={styles.ordersLoginText}>تسجيل الدخول</RText>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : (
+        filtered.map((order) => {
+          const tab = orderTabOf(order.status);
+          return (
+            <TouchableOpacity
+              key={order.id}
+              style={[
+                styles.orderCard,
+                tab === 'done' && styles.orderCardDone,
+                tab === 'cancelled' && styles.orderCardCancelled,
+              ]}
+              activeOpacity={0.85}
+              onPress={() => onOpenOrder?.(order)}
+            >
+              <View style={styles.orderCardTop}>
+                <View style={styles.orderCardPriceWrap}>
+                  <RText style={styles.orderCardPrice}>{formatSyp(order.total || 0)}</RText>
+                  <RText style={styles.orderCardNumber}>{order.number}</RText>
+                </View>
+                <View style={styles.orderCardInfo}>
+                  <View style={styles.orderCardTitleRow}>
+                    <RText style={styles.orderCardTitle}>{order.number}</RText>
+                    <OrderStatusBadge status={order.status} />
+                  </View>
+                  <RText style={styles.orderCardStore}>
+                    البائع: <RText style={styles.orderCardStoreName}>{order.store?.name || 'خان'}</RText>
+                  </RText>
+                </View>
+              </View>
+              <View style={styles.orderCardBottom}>
+                {tab === 'processing' ? (
+                  <TouchableOpacity style={styles.orderTrackButton} onPress={() => onOpenOrder?.(order)}>
+                    <RText style={styles.orderTrackText}>تتبع الطلب</RText>
+                    <AppIcon icon={Icons.LocateFixed} size={15} color={palette.white} />
+                  </TouchableOpacity>
+                ) : tab === 'cancelled' ? (
+                  <TouchableOpacity style={styles.orderTrackButton} onPress={() => onReorder?.(order)}>
+                    <RText style={styles.orderTrackText}>إعادة الطلب</RText>
+                    <AppIcon icon={Icons.RotateCcw} size={15} color={palette.white} />
+                  </TouchableOpacity>
+                ) : (
+                  <View />
+                )}
+                <View style={styles.orderCardChips}>
+                  <View style={styles.orderChip}>
+                    <RText style={styles.orderChipText}>{formatOrderDate(order.createdAt)}</RText>
+                    <AppIcon icon={Icons.CalendarDays} size={13} color={palette.muted} />
+                  </View>
+                  <View style={styles.orderChip}>
+                    <RText style={styles.orderChipText}>{orderItemsCount(order)} منتجات</RText>
+                    <AppIcon icon={Icons.ShoppingBag} size={13} color={palette.muted} />
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          );
+        })
+      )}
+    </ScreenScroll>
+  );
+}
+
+export function OrderTrackingScreen({ order, confirming = false, onBack, onConfirmDelivery, onSupport }) {
+  const status = order?.status || 'PENDING';
+  const cancelled = status === 'CANCELLED';
+  const stepIndex = orderStepIndex(status);
+  const canConfirm = !cancelled && (status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED');
+  const headline = cancelled
+    ? 'تم إلغاء الطلب'
+    : stepIndex === 3
+      ? 'تم توصيل طلبك'
+      : stepIndex === 2
+        ? 'طلبك في الطريق إليك'
+        : stepIndex === 1
+          ? 'طلبك جاهز'
+          : 'يتم تجهيز طلبك';
+  const subline = cancelled
+    ? 'تم إلغاء هذا الطلب، يمكنك إعادة طلبه في أي وقت'
+    : stepIndex === 3
+      ? 'يرجى تأكيد استلام الطلب'
+      : stepIndex === 2
+        ? 'المندوب في الطريق إليك الآن'
+        : 'يتم الآن تجهيز طلبك';
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>{order?.number || 'طلبي'}</RText>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onSupport}>
+          <AppIcon icon={Icons.Headphones} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.trackSteps}>
+        {ORDER_TRACK_STEPS.map((step, index) => {
+          const done = !cancelled && index < stepIndex;
+          const current = !cancelled && index === stepIndex;
+          return (
+            <View key={step.key} style={styles.trackStepItem}>
+              <View
+                style={[
+                  styles.trackStepDot,
+                  done && styles.trackStepDotDone,
+                  current && styles.trackStepDotCurrent,
+                  cancelled && styles.trackStepDotCancelled,
+                ]}
+              />
+              <RText
+                style={[
+                  styles.trackStepLabel,
+                  (done || current) && styles.trackStepLabelActive,
+                ]}
+              >
+                {step.label}
+              </RText>
+            </View>
+          );
+        })}
+      </View>
+
+      <RText style={styles.trackHeadline}>{headline}</RText>
+      <RText style={styles.trackSubline}>{subline}</RText>
+      {!cancelled && stepIndex < 2 ? (
+        <RText style={styles.trackEta}>
+          الوقت المتوقع{'  '}
+          <RText style={styles.trackEtaValue}>{formatOrderTime(order?.createdAt)}</RText>
+        </RText>
+      ) : null}
+
+      <View style={styles.trackDivider} />
+      <View style={styles.trackMetaRow}>
+        <RText style={styles.trackMetaText}>
+          رقم الطلب: <RText style={styles.trackMetaValue}>{order?.number || '-'}</RText>
+        </RText>
+        <RText style={styles.trackMetaText}>
+          العناصر المختارة{'  '}<RText style={styles.trackMetaValue}>{orderItemsCount(order)}</RText>
+        </RText>
+      </View>
+
+      <RText style={styles.trackSummaryTitle}>الملخص</RText>
+      <View style={styles.trackSummaryLine}>
+        <RText style={styles.trackSummaryValue}>{formatSyp(order?.subtotal || 0)}</RText>
+        <RText style={styles.trackSummaryLabel}>سعر الأصناف</RText>
+      </View>
+      <View style={styles.trackSummaryDivider} />
+      <View style={styles.trackSummaryLine}>
+        <RText style={styles.trackSummaryValue}>{formatSyp(order?.deliveryFee || 0)}</RText>
+        <RText style={styles.trackSummaryLabel}>رسوم التوصيل</RText>
+      </View>
+      <View style={styles.trackSummaryDivider} />
+      <View style={styles.trackSummaryLine}>
+        <RText style={styles.trackSummaryTotal}>{formatSyp(order?.total || 0)}</RText>
+        <RText style={styles.trackSummaryTotalLabel}>المجموع النهائي</RText>
+      </View>
+
+      <TouchableOpacity
+        style={[styles.trackConfirmButton, (!canConfirm || confirming) && styles.trackConfirmDisabled]}
+        disabled={!canConfirm || confirming}
+        onPress={() => onConfirmDelivery?.(order)}
+        activeOpacity={0.85}
+      >
+        <RText style={styles.trackConfirmText}>{confirming ? 'جارٍ التأكيد...' : 'تأكيد الاستلام'}</RText>
+      </TouchableOpacity>
+    </ScreenScroll>
+  );
+}
+
+export function OrderDeliveredScreen({ order, submitting = false, onSubmitReview, onHome }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState('');
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onHome}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>{order?.number || 'طلبي'}</RText>
+        <View style={styles.detailsTopSpacer} />
+      </View>
+
+      <Image source={reviewMascotImage} style={styles.deliveredMascot} resizeMode="contain" />
+      <RText style={styles.deliveredTitle}>تم الاستلام بنجاح</RText>
+      <RText style={styles.deliveredText}>يرجى مشاركة التقييم والملاحظات معنا</RText>
+
+      <View style={styles.deliveredStars}>
+        {[1, 2, 3, 4, 5].map((value) => (
+          <TouchableOpacity key={value} onPress={() => setRating(value)} activeOpacity={0.7}>
+            <AppIcon
+              icon={Icons.Star}
+              size={34}
+              color={value <= rating ? palette.amber : palette.border}
+              fill={value <= rating ? palette.amber : 'transparent'}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <RText style={styles.deliveredNoteLabel}>اضافة ملاحظة</RText>
+      <TextInput
+        style={styles.deliveredNoteInput}
+        value={comment}
+        onChangeText={setComment}
+        placeholder="اضافة ملاحظة"
+        placeholderTextColor={palette.muted}
+        multiline
+        textAlign="right"
+        textAlignVertical="top"
+      />
+
+      <TouchableOpacity
+        style={[styles.deliveredSubmit, submitting && styles.trackConfirmDisabled]}
+        disabled={submitting}
+        onPress={() => onSubmitReview?.({ orderId: order?.id, rating, comment: comment.trim() || undefined })}
+        activeOpacity={0.85}
+      >
+        <RText style={styles.deliveredSubmitText}>{submitting ? 'جارٍ الإرسال...' : 'ارسال'}</RText>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.deliveredHomeButton} onPress={onHome} activeOpacity={0.85}>
+        <RText style={styles.deliveredHomeText}>العودة للرئيسية</RText>
+      </TouchableOpacity>
+    </ScreenScroll>
+  );
+}
+
+export function AccountScreen({
+  session,
+  catalog,
+  loading,
+  error,
+  onRetry,
+  favorites = [],
+  onOpenAuth,
+  onOpenProduct,
+  onAddToCart,
+  onToggleFavorite,
+  onOpenFavorites,
+  onOpenNotifications,
+  onOpenOrders,
+  onOpenCoupons,
+  onShowAll,
+  onOpenSavedStores,
+  onOpenSupport,
+  onOpenAbout,
+  onEditProfile,
+  onLogout,
+}) {
+  const user = session?.user;
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'حسابي';
+  const products = listOrEmpty(catalog?.products);
+  const { productCardStyle } = useMarketplaceLayout();
+  const firstGuestRow = products.slice(0, 6);
+  const secondGuestRow = products.length >= 8 ? products.slice(6, 12) : [];
+
+  if (!user) {
+    return (
+      <ScreenScroll>
+        <View style={styles.accountGuestBanner}>
+          <View style={styles.accountGuestPattern}>
+            {[
+              { icon: Icons.Package, top: 16, left: 18, rotate: '-14deg' },
+              { icon: Icons.ShoppingCart, top: 18, right: 74, rotate: '10deg' },
+              { icon: Icons.Shirt || Icons.Tag, top: 64, left: 126, rotate: '-8deg' },
+              { icon: Icons.Handbag || Icons.ShoppingBag, top: 82, right: 28, rotate: '12deg' },
+              { icon: Icons.Tag, bottom: 42, right: 122, rotate: '-14deg' },
+              { icon: Icons.Truck, bottom: 26, left: 42, rotate: '9deg' },
+            ].map((item, index) => (
+              <View
+                key={`guest-pattern-${index}`}
+                style={[
+                  styles.accountGuestPatternIcon,
+                  {
+                    top: item.top,
+                    right: item.right,
+                    bottom: item.bottom,
+                    left: item.left,
+                    transform: [{ rotate: item.rotate }],
+                  },
+                ]}
+              >
+                <AppIcon icon={item.icon} size={28} color={palette.white} strokeWidth={1.8} />
+              </View>
+            ))}
+          </View>
+          <View style={styles.accountGuestContent}>
+            <View style={styles.accountGuestTexts}>
+              <RText style={styles.accountGuestTitle}>مرحبا بك في خان</RText>
+              <RText style={styles.accountGuestSubtitle}>أول طلب لك بعد التسجيل معنا</RText>
+              <TouchableOpacity style={styles.accountGuestCta} onPress={() => onOpenAuth?.('login')} activeOpacity={0.88}>
+                <RText style={styles.accountGuestCtaText}>تسجيل / إنشاء حساب</RText>
+              </TouchableOpacity>
+            </View>
+            <Image source={guestMascotImage} style={styles.accountGuestMascot} resizeMode="contain" />
+          </View>
+        </View>
+
+        <DataNotice loading={loading} error={error} onRetry={onRetry} />
+
+        {firstGuestRow.length ? (
+          <>
+            <SectionTitle title="الأكثر مبيعا" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+            <RtlHorizontalScroll refreshKey={`account-guest-products-${firstGuestRow.length}`} contentContainerStyle={styles.horizontalCards}>
+              {firstGuestRow.map((product) => (
+                <ProductCard
+                  key={`account-guest-main-${product.id || product.title}`}
+                  product={product}
+                  style={[productCardStyle, styles.accountGuestProductCard]}
+                  showcase
+                  onOpen={onOpenProduct}
+                  onAddToCart={onAddToCart}
+                  onToggleFavorite={onToggleFavorite}
+                  isFavorite={favorites.includes(product.id || product.title)}
+                />
+              ))}
+            </RtlHorizontalScroll>
+          </>
+        ) : null}
+
+        {secondGuestRow.length ? (
+          <>
+            <SectionTitle title="الأكثر مبيعا" icon={Icons.Flame || Icons.Star} onAction={() => onShowAll?.('recommended')} />
+            <RtlHorizontalScroll refreshKey={`account-guest-more-${secondGuestRow.length}`} contentContainerStyle={styles.horizontalCards}>
+              {secondGuestRow.map((product) => (
+                <ProductCard
+                  key={`account-guest-more-${product.id || product.title}`}
+                  product={product}
+                  style={[productCardStyle, styles.accountGuestProductCard]}
+                  showcase
+                  onOpen={onOpenProduct}
+                  onAddToCart={onAddToCart}
+                  onToggleFavorite={onToggleFavorite}
+                  isFavorite={favorites.includes(product.id || product.title)}
+                />
+              ))}
+            </RtlHorizontalScroll>
+          </>
+        ) : null}
+
+        {!loading && !firstGuestRow.length ? (
+          <RText style={styles.collectionEmpty}>لا توجد منتجات متاحة حاليا.</RText>
+        ) : null}
+      </ScreenScroll>
+    );
+  }
+
+  const menuItems = [
+    { key: 'notifications', title: 'الاشعارات', subtitle: 'ادارة الاشعارات والتنبيهات', icon: Icons.Bell, onPress: onOpenNotifications },
+    { key: 'orders', title: 'طلباتي', subtitle: 'طلباتي', icon: Icons.ShoppingBag, onPress: onOpenOrders },
+    { key: 'coupons', title: 'كوبوناتي', subtitle: 'كوبوناتي', icon: Icons.Ticket, onPress: onOpenCoupons },
+    { key: 'favorites', title: 'المفضلة', subtitle: 'المفضلة', icon: Icons.Heart, onPress: onOpenFavorites },
+    { key: 'stores', title: 'المتاجر المحفوظة', subtitle: 'المتاجر المحفوظة', icon: Icons.Tag, onPress: onOpenSavedStores },
+    { key: 'support', title: 'المساعدة والدعم', subtitle: 'المساعدة والدعم', icon: Icons.CircleAlert, onPress: onOpenSupport },
+    { key: 'about', title: 'عن التطبيق', subtitle: 'عن التطبيق', icon: Icons.Info, onPress: onOpenAbout },
+  ];
+
+  return (
+    <ScreenScroll>
+      <View style={styles.accountTopBar}>
+        <TouchableOpacity
+          style={styles.accountBellButton}
+          onPress={onOpenNotifications}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        >
+          <AppIcon icon={Icons.Bell} size={22} color={palette.amber} />
+        </TouchableOpacity>
+        <View style={styles.accountLocation}>
+          <AppIcon icon={Icons.ChevronDown} size={16} color={palette.amber} />
+          <RText style={styles.accountLocationText}>المنزل . الشعلان</RText>
+          <AppIcon icon={Icons.MapPin} size={20} color={palette.amber} />
+        </View>
+      </View>
+
+      <View style={styles.accountProfileCard}>
+        <TouchableOpacity
+          onPress={onEditProfile}
+          hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        >
+          <AppIcon icon={Icons.Pencil} size={18} color={palette.green} />
+        </TouchableOpacity>
+        <View style={styles.accountProfileInfo}>
+          <RText style={styles.accountProfileName}>{fullName}</RText>
+          <RText style={styles.accountProfilePhone}>{user.phone || 'حساب عميل خان'}</RText>
+        </View>
+        <View style={styles.accountProfileAvatar}>
+          {user.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.accountProfileAvatarImage} />
+          ) : (
+            <AppIcon icon={Icons.User} size={26} color={palette.white} />
+          )}
+        </View>
+      </View>
+
+      <View style={styles.accountMenuCard}>
+        {menuItems.map((item, index) => (
+          <TouchableOpacity
+            key={item.key}
+            style={[styles.accountMenuRow, index < menuItems.length - 1 && styles.accountMenuRowBorder]}
+            onPress={item.onPress}
+            activeOpacity={0.7}
+          >
+            <AppIcon icon={Icons.ChevronLeft} size={18} color={palette.ink} />
+            <View style={styles.accountMenuTexts}>
+              <RText style={styles.accountMenuTitle}>{item.title}</RText>
+              <RText style={styles.accountMenuSubtitle}>{item.subtitle}</RText>
+            </View>
+            <AppIcon icon={item.icon} size={22} color={palette.green} />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.accountLogoutButton} onPress={onLogout} activeOpacity={0.8}>
+        <RText style={styles.accountLogoutText}>تسجيل الخروج</RText>
+        <AppIcon icon={Icons.LogOut} size={20} color={palette.danger} />
+      </TouchableOpacity>
+    </ScreenScroll>
+  );
+}
+
+export function EditProfileScreen({ session, saving = false, error, onSave, onBack }) {
+  const user = session?.user;
+  const [form, setForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+  });
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const update = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
+  const firstName = form.firstName.trim();
+  const lastName = form.lastName.trim();
+  const canSave = firstName.length >= 2 && lastName.length >= 2 && !saving && !avatarUploading;
+
+  const pickAvatar = () => {
+    if (avatarUploading || saving) return;
+    if (typeof document === 'undefined') {
+      setAvatarError('اختيار الصور متاح حاليًا من نسخة الويب فقط');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setAvatarUploading(true);
+      setAvatarError('');
+      try {
+        const uploaded = await uploadsApi.file(file, 'customer');
+        setAvatarUrl(uploaded.url);
+      } catch (uploadError) {
+        setAvatarError(uploadError.message);
+      } finally {
+        setAvatarUploading(false);
+      }
+    };
+    input.click();
+  };
+
+  const save = () => {
+    if (!canSave) return;
+    const payload = { firstName, lastName };
+    if ((avatarUrl || '') !== (user?.avatarUrl || '')) {
+      payload.avatarUrl = avatarUrl;
+    }
+    onSave?.(payload);
+  };
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>تعديل الملف الشخصي</RText>
+        <View style={styles.detailsTopSpacer} />
+      </View>
+      <View style={styles.editProfileAvatarWrap}>
+        <TouchableOpacity style={styles.editProfileAvatar} onPress={pickAvatar} activeOpacity={0.85}>
+          {avatarUrl ? (
+            <Image source={{ uri: avatarUrl }} style={styles.editProfileAvatarImage} />
+          ) : (
+            <AppIcon icon={Icons.User} size={38} color={palette.white} />
+          )}
+          <View style={styles.editProfileAvatarBadge}>
+            <AppIcon icon={avatarUploading ? Icons.Loader : Icons.Camera} size={14} color={palette.white} />
+          </View>
+        </TouchableOpacity>
+        <RText style={styles.editProfileAvatarText}>
+          {avatarUploading ? 'جارٍ رفع الصورة...' : 'اضغط لتغيير صورة الحساب'}
+        </RText>
+        {avatarError ? (
+          <RText style={[styles.editProfileHint, { color: palette.danger, textAlign: 'center' }]}>{avatarError}</RText>
+        ) : null}
+      </View>
+      {error ? (
+        <RText style={[styles.authQuestion, { color: palette.danger }]}>{error}</RText>
+      ) : null}
+      <AuthField label="الاسم الأول" value={form.firstName} onChangeText={update('firstName')} placeholder="محمد" icon={Icons.User} />
+      <AuthField label="الكنية" value={form.lastName} onChangeText={update('lastName')} placeholder="الأحمد" icon={Icons.User} />
+      <View style={styles.authFieldBlock}>
+        <RText style={styles.authLabel}>رقم الهاتف</RText>
+        <View style={[styles.authInputShell, styles.authInputShellDisabled]}>
+          <TextInput
+            style={styles.authInput}
+            value={user?.phone || ''}
+            editable={false}
+            textAlign="right"
+          />
+          <AppIcon icon={Icons.Phone} size={20} color={palette.muted} />
+        </View>
+        <RText style={styles.editProfileHint}>رقم الهاتف هو معرّف حسابك ولا يمكن تغييره.</RText>
+      </View>
+      <TouchableOpacity
+        style={[styles.authPrimary, !canSave && styles.authPrimaryDisabled]}
+        onPress={save}
+        disabled={!canSave}
+      >
+        <RText style={styles.authPrimaryText}>{saving ? 'جارٍ الحفظ...' : 'حفظ التغييرات'}</RText>
+      </TouchableOpacity>
+    </ScreenScroll>
+  );
+}
+
+function AuthField({ label, placeholder, icon, secure = false, leadingIcon, value, onChangeText, blockStyle }) {
   const [visible, setVisible] = useState(false);
   const secureEntry = secure && !visible;
   const LeadingIcon = secure ? (visible ? Icons.Eye : Icons.EyeOff) : leadingIcon;
 
   return (
-    <View style={styles.authFieldBlock}>
+    <View style={[styles.authFieldBlock, blockStyle]}>
       <RText style={styles.authLabel}>{label}</RText>
       <View style={styles.authInputShell}>
         {LeadingIcon ? (
@@ -359,6 +1196,8 @@ export function AuthScreen({
   session,
   authLoading,
   authError,
+  rememberedAccount,
+  initialMode = 'login',
   onLogin,
   onRegister,
   onVerifyRegister,
@@ -366,22 +1205,40 @@ export function AuthScreen({
   onResetPassword,
   onLogout,
 }) {
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState(initialMode);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
-    phone: '',
+    phone: rememberedAccount?.phone || '',
     password: '',
+    confirmPassword: '',
   });
+  const [localAuthError, setLocalAuthError] = useState('');
+  const [remember, setRemember] = useState(Boolean(rememberedAccount?.phone));
   const [otpCode, setOtpCode] = useState('');
   const [pendingRegister, setPendingRegister] = useState(null);
   const [pendingReset, setPendingReset] = useState(null);
   const [resetForm, setResetForm] = useState({ phone: '', password: '' });
   const login = mode === 'login';
-  const update = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
-  const updateReset = (key) => (value) => setResetForm((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+  const update = (key) => (value) => {
+    setLocalAuthError('');
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+  const updateReset = (key) => (value) => {
+    setLocalAuthError('');
+    setResetForm((current) => ({ ...current, [key]: value }));
+  };
 
   const requestRegisterOtp = async () => {
+    if (form.password !== form.confirmPassword) {
+      setLocalAuthError('كلمة المرور وتأكيدها غير متطابقين');
+      return;
+    }
+
     const verification = await onRegister?.({
       firstName: form.firstName,
       lastName: form.lastName,
@@ -404,6 +1261,7 @@ export function AuthScreen({
   };
 
   const requestResetOtp = async () => {
+    setLocalAuthError('');
     const verification = await onRequestPasswordOtp?.({ phone: resetForm.phone });
     if (verification) {
       setPendingReset(verification);
@@ -412,6 +1270,7 @@ export function AuthScreen({
   };
 
   const resetPassword = async () => {
+    setLocalAuthError('');
     const done = await onResetPassword?.({
       phone: pendingReset?.phone || resetForm.phone,
       requestId: pendingReset?.requestId,
@@ -429,9 +1288,11 @@ export function AuthScreen({
     return (
       <ScreenScroll>
         <View style={styles.successScreen}>
-          <View style={styles.successIcon}>
-            <AppIcon icon={Icons.UserCheck || Icons.Check} size={42} color={palette.white} />
-          </View>
+          <Image
+            source={reviewMascotImage}
+            style={styles.successMascot}
+            resizeMode="contain"
+          />
           <RText style={styles.successTitle}>أهلًا {session.user.firstName}</RText>
           <RText style={styles.successText}>تم ربط حسابك بالباك إند ويمكنك مزامنة السلة والطلبات.</RText>
           <TouchableOpacity style={styles.successButton} onPress={onLogout}>
@@ -445,31 +1306,33 @@ export function AuthScreen({
   if (mode === 'reset') {
     return (
       <ScreenScroll>
-        <RText style={styles.authTitle}>Reset password</RText>
-        {authError ? (
-          <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError}</RText>
+        <RText style={styles.authTitle}>استرجاع كلمة المرور</RText>
+        {authError || localAuthError ? (
+          <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError || localAuthError}</RText>
         ) : null}
         {!pendingReset ? (
           <>
-            <AuthField label="Phone number" value={resetForm.phone} onChangeText={updateReset('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
+            <RText style={styles.authHint}>أدخل رقم الهاتف المرتبط بحسابك وسنرسل رمز التحقق عبر تليغرام.</RText>
+            <AuthField label="رقم الهاتف" value={resetForm.phone} onChangeText={updateReset('phone')} placeholder="رقم الهاتف" icon={Icons.Phone} />
             <TouchableOpacity style={styles.authPrimary} onPress={requestResetOtp}>
-              <RText style={styles.authPrimaryText}>{authLoading ? 'Sending Telegram code...' : 'Send Telegram code'}</RText>
+              <RText style={styles.authPrimaryText}>{authLoading ? 'جارٍ التحقق...' : 'إرسال رمز تليغرام'}</RText>
             </TouchableOpacity>
           </>
         ) : (
           <>
-            <AuthField label="Telegram code" value={otpCode} onChangeText={setOtpCode} placeholder="123456" icon={Icons.MessageCircle || Icons.Send} />
-            <AuthField label="New password" value={resetForm.password} onChangeText={updateReset('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
+            <RText style={styles.authHint}>تم إرسال رمز التحقق إلى تليغرام للرقم {pendingReset.phone}.</RText>
+            <AuthField label="رمز تليغرام" value={otpCode} onChangeText={setOtpCode} placeholder="123456" icon={Icons.MessageCircle || Icons.Send} />
+            <AuthField label="كلمة المرور الجديدة" value={resetForm.password} onChangeText={updateReset('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
             <TouchableOpacity style={styles.authPrimary} onPress={resetPassword}>
-              <RText style={styles.authPrimaryText}>{authLoading ? 'Resetting...' : 'Reset password'}</RText>
+              <RText style={styles.authPrimaryText}>{authLoading ? 'جارٍ الحفظ...' : 'تغيير كلمة المرور'}</RText>
             </TouchableOpacity>
             <TouchableOpacity onPress={requestResetOtp}>
-              <RText style={styles.linkText}>Resend Telegram code</RText>
+              <RText style={styles.linkText}>إعادة إرسال رمز تليغرام</RText>
             </TouchableOpacity>
           </>
         )}
         <TouchableOpacity onPress={() => setMode('login')}>
-          <RText style={styles.linkText}>Back to login</RText>
+          <RText style={styles.linkText}>العودة إلى تسجيل الدخول</RText>
         </TouchableOpacity>
       </ScreenScroll>
     );
@@ -499,56 +1362,42 @@ export function AuthScreen({
 
   return (
     <ScreenScroll>
-      <View style={styles.authTabs}>
-        {['login', 'signup'].map((item) => (
-          <TouchableOpacity
-            key={item}
-            onPress={() => setMode(item)}
-            style={[styles.authTab, mode === item && styles.authTabActive]}
-          >
-            <RText style={[styles.authTabText, mode === item && styles.authTabTextActive]}>
-              {item === 'login' ? 'تسجيل الدخول' : 'إنشاء حساب'}
-            </RText>
-          </TouchableOpacity>
-        ))}
-      </View>
       <RText style={styles.authTitle}>{login ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}</RText>
-      {authError ? (
-        <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError}</RText>
+      {authError || localAuthError ? (
+        <RText style={[styles.authQuestion, { color: palette.danger }]}>{authError || localAuthError}</RText>
       ) : null}
       {login ? (
         <>
-          <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
+          <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="رقم الهاتف" icon={Icons.Phone} />
           <AuthField label="كلمة المرور" value={form.password} onChangeText={update('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
           <View style={styles.authInline}>
             <TouchableOpacity onPress={() => setMode('reset')}>
               <RText style={styles.linkText}>نسيت كلمة المرور؟</RText>
             </TouchableOpacity>
-            <View style={styles.rememberRow}>
-              <View style={styles.checkbox} />
+            <TouchableOpacity style={styles.rememberRow} onPress={() => setRemember((current) => !current)}>
+              <View style={[styles.checkbox, remember && styles.checkboxChecked]}>
+                {remember ? <AppIcon icon={Icons.Check} size={10} color={palette.white} /> : null}
+              </View>
               <RText style={styles.tinyMuted}>تذكرني</RText>
-            </View>
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity style={styles.authPrimary} onPress={() => onLogin?.({ phone: form.phone, password: form.password })}>
+          <TouchableOpacity style={styles.authPrimary} onPress={() => onLogin?.({ phone: form.phone, password: form.password, remember })}>
             <RText style={styles.authPrimaryText}>{authLoading ? 'جاري الدخول...' : 'تسجيل الدخول'}</RText>
           </TouchableOpacity>
           <RText style={styles.authQuestion}>لم تقم بالاشتراك معنا؟</RText>
           <TouchableOpacity onPress={() => setMode('signup')}>
-            <RText style={styles.linkText}>إنشاء حساب سهل ولن يستغرق أكثر من دقيقة</RText>
+            <RText style={styles.authSignupLink}>إنشاء الحساب سهل ويستغرق أقل من دقيقة</RText>
           </TouchableOpacity>
         </>
       ) : (
         <>
           <View style={styles.twoColumns}>
-            <AuthField label="الاسم الأول" value={form.firstName} onChangeText={update('firstName')} placeholder="الاسم الأول" icon={Icons.User} />
-            <AuthField label="اسم العائلة" value={form.lastName} onChangeText={update('lastName')} placeholder="اسم العائلة" icon={Icons.User} />
+            <AuthField blockStyle={styles.authFieldHalf} label="الاسم الأول" value={form.firstName} onChangeText={update('firstName')} placeholder="الاسم الأول" icon={Icons.User} />
+            <AuthField blockStyle={styles.authFieldHalf} label="اسم العائلة" value={form.lastName} onChangeText={update('lastName')} placeholder="اسم العائلة" icon={Icons.User} />
           </View>
-          <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="09XXXXXXXX" icon={Icons.Phone} />
+          <AuthField label="رقم الهاتف" value={form.phone} onChangeText={update('phone')} placeholder="**********" icon={Icons.Phone} />
           <AuthField label="كلمة المرور" value={form.password} onChangeText={update('password')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
-          <View style={styles.termsRow}>
-            <View style={styles.checkbox} />
-            <RText style={styles.linkText}>أوافق على شروط وأحكام استخدام خان</RText>
-          </View>
+          <AuthField label="تأكيد كلمة المرور" value={form.confirmPassword} onChangeText={update('confirmPassword')} placeholder="**********" icon={Icons.Lock} leadingIcon={Icons.EyeOff} secure />
           <TouchableOpacity
             style={styles.authPrimary}
             onPress={requestRegisterOtp}
@@ -556,22 +1405,13 @@ export function AuthScreen({
             <RText style={styles.authPrimaryText}>{authLoading ? 'جاري إنشاء الحساب...' : 'إنشاء حساب'}</RText>
           </TouchableOpacity>
           <View style={styles.authQuestionRow}>
-            <RText style={styles.authQuestion}>لديك حساب مسبق؟</RText>
+            <RText style={styles.authInlineQuestion}>لديك حساب مسبق؟</RText>
             <TouchableOpacity onPress={() => setMode('login')}>
               <RText style={styles.linkText}>تسجيل دخول</RText>
             </TouchableOpacity>
           </View>
         </>
       )}
-      <View style={styles.dividerRow}>
-        <View style={styles.divider} />
-        <RText style={styles.tinyMuted}>أو</RText>
-        <View style={styles.divider} />
-      </View>
-      <TouchableOpacity style={styles.googleButton}>
-        <Image source={images.google} style={styles.googleIcon} />
-        <RText style={styles.googleText}>سجل عن طريق غوغل</RText>
-      </TouchableOpacity>
     </ScreenScroll>
   );
 }

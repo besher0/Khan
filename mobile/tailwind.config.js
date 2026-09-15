@@ -5,8 +5,8 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Arial'],
-        cairo: ['Arial'],
+        sans: ['Cairo', 'Arial', 'sans-serif'],
+        cairo: ['Cairo', 'Arial', 'sans-serif'],
       },
       colors: {
         brand: '#179B7D',

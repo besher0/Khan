@@ -23,10 +23,12 @@ import {
   CreateAdminStoreDto,
   CreateCategoryDto,
   CreateDeliveryEventDto,
+  CreateHomeBannerDto,
   UpdateOrderStatusDto,
   UpdateStoreStatusDto,
   UpdateStorePackageDto,
   UpdateCategoryDto,
+  UpdateHomeBannerDto,
   UpdateUserStatusDto,
 } from './dto';
 
@@ -49,6 +51,23 @@ export class AdminController {
   @Get('products')
   products() {
     return this.admin.products();
+  }
+
+  @Get('banners')
+  banners() {
+    return this.admin.banners();
+  }
+
+  @Post('banners')
+  @Roles(UserRole.ADMIN)
+  createBanner(@Body() dto: CreateHomeBannerDto) {
+    return this.admin.createBanner(dto);
+  }
+
+  @Patch('banners/:id')
+  @Roles(UserRole.ADMIN)
+  updateBanner(@Param('id') id: string, @Body() dto: UpdateHomeBannerDto) {
+    return this.admin.updateBanner(id, dto);
   }
 
   @Post('packages')

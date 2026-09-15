@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   DeliveryEventSource,
+  NotificationType,
   OrderStatus,
   PaymentStatus,
   ReviewStatus,
@@ -16,20 +17,28 @@ import { PrismaService } from '../prisma/prisma.service';
 import { safeUserSelect } from '../common/prisma/safe-user-select';
 import { normalizeSyrianPhone } from '../auth/phone';
 import { slugify } from '../common/utils/slugify';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateAdminStoreDto,
   CreateStorePackageDto,
   ConfirmPaymentDto,
   CreateCategoryDto,
   CreateDeliveryEventDto,
+  CreateHomeBannerDto,
   UpdateOrderStatusDto,
   UpdateStorePackageDto,
   UpdateCategoryDto,
+  UpdateHomeBannerDto,
 } from './dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   stores() {
     return this.prisma.store.findMany({
@@ -60,6 +69,52 @@ export class AdminService {
         images: { orderBy: { position: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async banners() {
+    try {
+      return await this.prisma.homeBanner.findMany({
+        include: { product: { include: { images: { orderBy: { position: 'asc' } }, store: true } } },
+        orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+      });
+    } catch (error) {
+      this.logger.warn(`Home banners table is not ready yet: ${String(error)}`);
+      return [];
+    }
+  }
+
+  createBanner(dto: CreateHomeBannerDto) {
+    return this.prisma.homeBanner.create({
+      data: {
+        title: dto.title.trim(),
+        subtitle: dto.subtitle?.trim() || undefined,
+        imageUrl: dto.imageUrl.trim(),
+        ctaLabel: dto.ctaLabel?.trim() || undefined,
+        targetUrl: dto.targetUrl?.trim() || undefined,
+        productId: dto.productId || undefined,
+        position: dto.position ?? 0,
+        status: dto.status ?? 'ACTIVE',
+      },
+    });
+  }
+
+  async updateBanner(id: string, dto: UpdateHomeBannerDto) {
+    const existing = await this.prisma.homeBanner.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Banner not found');
+
+    return this.prisma.homeBanner.update({
+      where: { id },
+      data: {
+        title: dto.title?.trim(),
+        subtitle: dto.subtitle?.trim() || undefined,
+        imageUrl: dto.imageUrl?.trim(),
+        ctaLabel: dto.ctaLabel?.trim() || undefined,
+        targetUrl: dto.targetUrl?.trim() || undefined,
+        productId: dto.productId === undefined ? undefined : dto.productId || null,
+        position: dto.position,
+        status: dto.status,
+      },
     });
   }
 
@@ -241,8 +296,8 @@ export class AdminService {
     const existing = await this.prisma.order.findUnique({ where: { id: orderId } });
     if (!existing) throw new NotFoundException('Order not found');
 
-    return this.prisma.$transaction(async (tx) => {
-      const order = await tx.order.update({
+    const order = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
         where: { id: orderId },
         data: {
           status: dto.status,
@@ -283,8 +338,41 @@ export class AdminService {
         });
       }
 
-      return order;
+      return updated;
     });
+
+    await this.safeNotify(order.userId, {
+      type: NotificationType.ORDER,
+      title: this.orderStatusTitle(order.status),
+      body: `طلبك ${order.number}: ${this.orderStatusTitle(order.status)}`,
+      data: { orderId: order.id, status: order.status },
+    });
+
+    return order;
+  }
+
+  private orderStatusTitle(status: OrderStatus): string {
+    const titles: Record<OrderStatus, string> = {
+      [OrderStatus.PENDING]: 'قيد المراجعة',
+      [OrderStatus.CONFIRMED]: 'تم تأكيد الطلب',
+      [OrderStatus.PREPARING]: 'جاري تحضير طلبك',
+      [OrderStatus.READY_FOR_PICKUP]: 'طلبك جاهز للاستلام',
+      [OrderStatus.OUT_FOR_DELIVERY]: 'طلبك في الطريق إليك',
+      [OrderStatus.DELIVERED]: 'تم توصيل طلبك',
+      [OrderStatus.CANCELLED]: 'تم إلغاء طلبك',
+    };
+    return titles[status] ?? status;
+  }
+
+  private async safeNotify(
+    userId: string,
+    input: { type: NotificationType; title: string; body: string; data?: Record<string, string> },
+  ) {
+    try {
+      await this.notifications.createAndPush({ ...input, userId, data: input.data ?? {} });
+    } catch (error) {
+      this.logger.error(`Push notification failed for user ${userId}: ${String(error)}`);
+    }
   }
 
   async payments(query: PageQueryDto) {
@@ -326,11 +414,14 @@ export class AdminService {
   }
 
   async confirmPayment(id: string, dto: ConfirmPaymentDto) {
-    const payment = await this.prisma.payment.findUnique({ where: { id } });
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: { order: { select: { userId: true, number: true } } },
+    });
     if (!payment) throw new NotFoundException('Payment not found');
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.payment.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({
         where: { id },
         data: {
           status: dto.status,
@@ -342,8 +433,26 @@ export class AdminService {
         where: { id: payment.orderId },
         data: { paymentStatus: dto.status },
       });
-      return updated;
+      return updatedPayment;
     });
+
+    if (dto.status !== payment.status) {
+      const paid = dto.status === PaymentStatus.PAID;
+      const failed = dto.status === PaymentStatus.FAILED || dto.status === PaymentStatus.CANCELLED;
+
+      await this.safeNotify(payment.order.userId, {
+        type: NotificationType.PAYMENT,
+        title: paid ? 'تم تأكيد الدفع' : failed ? 'مشكلة في الدفع' : 'تحديث على الدفع',
+        body: paid
+          ? `تم تأكيد دفع الطلب ${payment.order.number}. شكرًا لك!`
+          : failed
+            ? `تعذر تأكيد الدفع للطلب ${payment.order.number}. يرجى المحاولة مجددًا.`
+            : `حالة الدفع للطلب ${payment.order.number} أصبحت ${dto.status}.`,
+        data: { orderId: payment.orderId, paymentId: payment.id, status: dto.status },
+      });
+    }
+
+    return updated;
   }
 
   deliveryEvents() {

@@ -12,6 +12,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
+    "prisma:clear-marketplace-seed": "ts-node prisma/clear-marketplace-seed.ts",
     "prisma:validate": "prisma validate"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "cloudinary": "^2.11.0",
+    "firebase-admin": "^13.10.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

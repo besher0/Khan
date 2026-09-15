@@ -11,6 +11,7 @@ const createTitles = {
   reel: 'رفع ريل جديد',
   coupon: 'إضافة كوبون',
   category: 'إضافة قسم',
+  banner: 'إضافة بنر للرئيسية',
   package: 'إضافة باقة جديدة',
 };
 
@@ -21,6 +22,7 @@ function initialCreateForm(type) {
   if (type === 'reel') return { title: '', videoUrl: '', thumbnailUrl: '', productId: '', status: 'DRAFT' };
   if (type === 'coupon') return { code: '', type: 'PERCENT', value: '', minOrderAmount: '', maxDiscountAmount: '', endsAt: '', usageLimit: '' };
   if (type === 'category') return { name: '', imageUrl: '' };
+  if (type === 'banner') return { title: '', subtitle: '', imageUrl: '', ctaLabel: '', targetUrl: '', productId: '', position: '0', status: 'ACTIVE' };
   if (type === 'package') return { name: '', price: '', durationDays: '30', maxProducts: '', maxReels: '', maxCoupons: '', isActive: true };
   return {};
 }
@@ -101,6 +103,18 @@ function CreateEntityModal({ type, data, saving, onClose, onSubmit, initialData,
         await onSubmit({
           name: form.name.trim(),
           imageUrl: form.imageUrl.trim() || undefined,
+        });
+      } else if (type === 'banner') {
+        if (!form.title.trim() || !form.imageUrl.trim()) throw new Error('عنوان البنر والصورة مطلوبان.');
+        await onSubmit({
+          title: form.title.trim(),
+          subtitle: form.subtitle.trim() || undefined,
+          imageUrl: form.imageUrl.trim(),
+          ctaLabel: form.ctaLabel.trim() || undefined,
+          targetUrl: form.targetUrl.trim() || undefined,
+          productId: form.productId || undefined,
+          position: Number(form.position || 0),
+          status: form.status,
         });
       } else if (type === 'package') {
         if (!form.name.trim() || form.price === '' || form.durationDays === '' || form.maxProducts === '' || form.maxReels === '' || form.maxCoupons === '') {
@@ -216,6 +230,21 @@ function CreateEntityModal({ type, data, saving, onClose, onSubmit, initialData,
               <>
                 <FormField label="اسم القسم *" value={form.name} onChangeText={setValue('name')} placeholder="مثال: إلكترونيات" />
                 <UploadField label="صورة القسم" value={form.imageUrl} onChange={setValue('imageUrl')} onError={setFormError} area="admin" />
+              </>
+            ) : null}
+
+            {type === 'banner' ? (
+              <>
+                <FormField label="عنوان البنر *" value={form.title} onChangeText={setValue('title')} placeholder="مثال: عروض نهاية الأسبوع" />
+                <FormField label="وصف البنر" value={form.subtitle} onChangeText={setValue('subtitle')} placeholder="نص قصير يظهر داخل البنر" multiline />
+                <UploadField label="صورة البنر *" value={form.imageUrl} onChange={setValue('imageUrl')} onError={setFormError} area="admin" />
+                <View style={styles.formColumns}>
+                  <FormField label="نص الزر" value={form.ctaLabel} onChangeText={setValue('ctaLabel')} placeholder="اكتشف الآن" />
+                  <FormField label="الترتيب" value={form.position} onChangeText={setValue('position')} placeholder="0" keyboardType="numeric" />
+                </View>
+                <FormField label="رابط اختياري" value={form.targetUrl} onChangeText={setValue('targetUrl')} placeholder="https://..." />
+                <ChoiceField label="منتج مرتبط" value={form.productId} onChange={setValue('productId')} options={[{ value: '', label: 'بدون منتج' }, ...data.products.map((item) => ({ value: item.id, label: item.name }))]} />
+                <ChoiceField label="حالة البنر" value={form.status} onChange={setValue('status')} options={[{ value: 'ACTIVE', label: 'فعال' }, { value: 'INACTIVE', label: 'متوقف' }]} />
               </>
             ) : null}
 

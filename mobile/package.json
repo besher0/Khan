@@ -13,9 +13,12 @@
     "export:native": "expo export --platform android --output-dir dist-native"
   },
   "dependencies": {
+    "@expo-google-fonts/cairo": "^0.4.2",
     "@expo/metro-runtime": "~6.1.2",
     "@vitejs/plugin-react": "^4.3.4",
     "expo": "~54.0.35",
+    "expo-asset": "^57.0.17",
+    "expo-font": "^57.0.4",
     "lucide-react": "^0.577.0",
     "lucide-react-native": "^0.577.0",
     "nativewind": "^4.1.23",
@@ -32,6 +35,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
-    "autoprefixer": "^10.4.27"
+    "autoprefixer": "^10.4.27",
+    "babel-preset-expo": "~54.0.11"
   }
 }

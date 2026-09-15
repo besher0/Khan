@@ -10,16 +10,21 @@ import {
   PaymentMethod,
   PaymentStatus,
   ProductStatus,
+  NotificationType,
   WalletTransactionStatus,
   WalletTransactionType,
 } from '@prisma/client';
 import { calculateCouponDiscount } from '../common/utils/coupons';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckoutAddressDto, CheckoutDto } from './dto';
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async checkout(userId: string, dto: CheckoutDto) {
     const cart = await this.prisma.cart.findUnique({
@@ -149,6 +154,18 @@ export class OrdersService {
       return created;
     });
 
+    await this.notifications.createAndPush({
+      userId,
+      type: NotificationType.ORDER,
+      title: 'تم إنشاء الطلب',
+      body: `طلبك ${order.number} قيد المراجعة.`,
+      data: {
+        orderId: order.id,
+        orderNumber: order.number,
+        screen: 'orders',
+      },
+    });
+
     return order;
   }
 
@@ -171,6 +188,45 @@ export class OrdersService {
     }
 
     return order;
+  }
+
+  async confirmDelivery(userId: string, id: string) {
+    const order = await this.prisma.order.findFirst({ where: { id, userId } });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.status === OrderStatus.DELIVERED) {
+      return this.getOrderForCustomer(userId, id);
+    }
+
+    if (
+      order.status !== OrderStatus.OUT_FOR_DELIVERY &&
+      order.status !== OrderStatus.READY_FOR_PICKUP
+    ) {
+      throw new BadRequestException('Order is not ready to be confirmed yet');
+    }
+
+    const updated = await this.prisma.order.update({
+      where: { id: order.id },
+      data: { status: OrderStatus.DELIVERED, deliveredAt: new Date() },
+      include: this.orderInclude(),
+    });
+
+    await this.notifications.createAndPush({
+      userId,
+      type: NotificationType.ORDER,
+      title: 'تم الاستلام',
+      body: `تم تأكيد استلام طلبك ${order.number}. شكرًا لتسوقك معنا!`,
+      data: {
+        orderId: order.id,
+        orderNumber: order.number,
+        screen: 'orders',
+      },
+    });
+
+    return updated;
   }
 
   private async resolveAddress(userId: string, dto: CheckoutDto) {

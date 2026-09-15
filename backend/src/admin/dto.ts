@@ -11,6 +11,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsIn,
   Min,
   MinLength,
 } from 'class-validator';
@@ -143,6 +144,76 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+}
+
+export class CreateHomeBannerDto {
+  @IsString()
+  title: string;
+
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
+
+  @IsString()
+  imageUrl: string;
+
+  @IsOptional()
+  @IsString()
+  ctaLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  targetUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export class UpdateHomeBannerDto {
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  ctaLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  targetUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  productId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  position?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
 }
 
 export class UpdateStoreStatusDto {

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Image, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 import * as Icons from '../../../../icons';
 import googleImage from '../../../../assets/google.jpg';
 import storeBannerImage from '../../../../assets/store-banner.jpg';
@@ -28,9 +29,25 @@ export const images = {
 const couponColors = [palette.green, palette.amber, palette.greenDark, palette.danger];
 const IconCircle = Icons.Circle || Icons.Dot;
 
-export function AppIcon({ icon, size = 20, color = palette.ink, strokeWidth = 2 }) {
+export function AppIcon({ icon, size = 20, color = palette.ink, strokeWidth = 2, fill = 'none' }) {
   const Glyph = icon || IconCircle;
-  return <Glyph size={size} color={color} strokeWidth={strokeWidth} />;
+  return <Glyph size={size} color={color} strokeWidth={strokeWidth} fill={fill} />;
+}
+
+export function CartIcon({ size = 20, color = palette.green }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M4.8 5.8h2.1l1.6 8.6h8.5c1 0 1.8-.7 2.1-1.7l1-4.4H8.1"
+        stroke={color}
+        strokeWidth={2.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="10.2" cy="18.3" r="1.2" fill={color} />
+      <Circle cx="17.1" cy="18.3" r="1.2" fill={color} />
+    </Svg>
+  );
 }
 
 export function RText({ children, style, ...props }) {
@@ -112,8 +129,24 @@ export function normalizeCoupon(coupon, index = 0) {
     id: coupon.id,
     code: coupon.code,
     label,
+    storeId: coupon.storeId || coupon.store?.id,
     color: couponColors[index % couponColors.length],
     raw: coupon,
+  };
+}
+
+export function normalizeBanner(banner, index = 0) {
+  if (!banner?.imageUrl) return null;
+  return {
+    id: banner.id,
+    title: banner.title || '',
+    subtitle: banner.subtitle || '',
+    image: resolveRemoteImage(banner.imageUrl),
+    ctaLabel: banner.ctaLabel || '',
+    targetUrl: banner.targetUrl || '',
+    position: Number(banner.position || index),
+    product: banner.product ? normalizeProduct(banner.product, index) : null,
+    raw: banner,
   };
 }
 
@@ -139,15 +172,29 @@ export function normalizeCart(cart) {
     .filter((item) => item.product);
 }
 
-export function HeaderSearch({ title, compact = false, value, onChangeText, onSubmit }) {
+export function HeaderSearch({
+  title,
+  compact = false,
+  value,
+  onChangeText,
+  onSubmit,
+  onOpenFavorites,
+  onOpenNotifications,
+  notificationCount = 0,
+}) {
   return (
     <View style={[styles.header, compact && styles.headerCompact]}>
       <View style={styles.headerActions}>
-        <TouchableOpacity style={styles.roundIconGhost}>
+        <TouchableOpacity style={styles.roundIconGhost} onPress={onOpenNotifications}>
           <AppIcon icon={Icons.Bell} size={19} color={palette.amber} />
+          {notificationCount > 0 ? (
+            <View style={styles.headerBadge}>
+              <RText style={styles.headerBadgeText}>{notificationCount > 9 ? '9+' : notificationCount}</RText>
+            </View>
+          ) : null}
         </TouchableOpacity>
-        <TouchableOpacity style={styles.roundIconGhost}>
-          <AppIcon icon={Icons.ShoppingBag} size={19} color={palette.amber} />
+        <TouchableOpacity style={styles.roundIconGhost} onPress={onOpenFavorites}>
+          <AppIcon icon={Icons.Heart} size={19} color={palette.amber} />
         </TouchableOpacity>
       </View>
       {title ? <RText style={styles.headerTitle}>{title}</RText> : null}
@@ -228,7 +275,7 @@ export function ReelCard({ item, onPress, style }) {
       </View>
       <View style={styles.reelMeta}>
         <TouchableOpacity style={styles.miniCart}>
-          <AppIcon icon={Icons.ShoppingCart} size={15} color={palette.green} />
+          <CartIcon size={15} color={palette.green} />
         </TouchableOpacity>
         <RText numberOfLines={1} style={styles.reelTitle}>
           {item.title}
@@ -238,14 +285,20 @@ export function ReelCard({ item, onPress, style }) {
   );
 }
 
-export function CouponCard({ coupon, index, style }) {
+export function CouponCard({ coupon, index, style, onCopy }) {
   return (
     <TouchableOpacity style={[styles.couponCard, { backgroundColor: coupon.color }, style]}>
       <View style={styles.ticketCutLeft} />
       <View style={styles.ticketCutRight} />
       <RText style={styles.couponPrice}>{coupon.label || '-'}</RText>
       <RText style={styles.couponCode}>كود: {coupon.code}</RText>
-      <TouchableOpacity style={styles.copyButton}>
+      <TouchableOpacity
+        style={styles.copyButton}
+        onPress={(event) => {
+          event?.stopPropagation?.();
+          onCopy?.(coupon.code);
+        }}
+      >
         <RText style={styles.copyButtonText}>نسخ</RText>
       </TouchableOpacity>
       <RText style={styles.couponIndex}>0{index + 1}</RText>
@@ -286,7 +339,13 @@ export function ProductCard({
             <AppIcon icon={Icons.Package} size={28} color={palette.green} />
           </View>
         )}
-        <TouchableOpacity style={styles.heartButton} onPress={() => onToggleFavorite?.(product)}>
+        <TouchableOpacity
+          style={styles.heartButton}
+          onPress={(event) => {
+            event?.stopPropagation?.();
+            onToggleFavorite?.(product);
+          }}
+        >
           <AppIcon
             icon={Icons.Heart}
             size={17}
@@ -314,8 +373,14 @@ export function ProductCard({
         </RText>
       </View>
       <RText style={[styles.productPrice, showcase && styles.productPriceShowcase]}>{product.price}</RText>
-      <TouchableOpacity style={[styles.productCart, showcase && styles.productCartShowcase]} onPress={() => onAddToCart?.(product)}>
-        <AppIcon icon={Icons.ShoppingCart} size={16} color={palette.green} />
+      <TouchableOpacity
+        style={[styles.productCart, showcase && styles.productCartShowcase]}
+        onPress={(event) => {
+          event?.stopPropagation?.();
+          onAddToCart?.(product);
+        }}
+      >
+        <CartIcon size={16} color={palette.green} />
       </TouchableOpacity>
     </TouchableOpacity>
   );

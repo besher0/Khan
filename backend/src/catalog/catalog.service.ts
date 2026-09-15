@@ -8,7 +8,7 @@ export class CatalogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async home() {
-    const [categories, featuredProducts, latestReels, coupons] = await Promise.all([
+    const [categories, featuredProducts, latestReels, coupons, banners] = await Promise.all([
       this.categories(),
       this.prisma.product.findMany({
         where: {
@@ -32,9 +32,23 @@ export class CatalogService {
         take: 8,
         orderBy: { createdAt: 'desc' },
       }),
+      this.activeBanners(),
     ]);
 
-    return { categories, featuredProducts, latestReels, coupons };
+    return { categories, featuredProducts, latestReels, coupons, banners };
+  }
+
+  private async activeBanners() {
+    try {
+      return await this.prisma.homeBanner.findMany({
+        where: { status: 'ACTIVE' },
+        include: { product: { include: this.productInclude() } },
+        take: 8,
+        orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+      });
+    } catch {
+      return [];
+    }
   }
 
   categories() {

@@ -9,8 +9,10 @@ import {
 } from 'react-native';
 import * as Icons from '../../../icons';
 import { adminApi, authApi, catalogApi, merchantApi, uploadsApi } from '../../services/api';
+import { KhanWordmark } from '../../components/KhanLogo';
 import CreateEntityModal from './components/CreateEntityModal';
 import { Icon, ProductThumb, SwitchControl } from './components/DashboardComponents';
+import BannersView from './views/BannersView';
 import CategoriesView from './views/CategoriesView';
 import CustomersView from './views/CustomersView';
 import OffersView from './views/OffersView';
@@ -35,6 +37,7 @@ const navItems = [
   ['orders', 'الطلبات', Icons.ShoppingBag],
   ['products', 'المنتجات', Icons.Package],
   ['categories', 'الأقسام', Icons.FolderTree],
+  ['banners', 'بنرات الرئيسية', Icons.Image],
   ['reels', 'الريلز', Icons.Video],
   ['offers', 'العروض والكوبونات', Icons.Ticket],
   ['customers', 'العملاء والتقييمات', Icons.Users],
@@ -48,6 +51,7 @@ const emptyRemoteData = {
   orders: { items: [], page: 1, limit: 20, total: 0, totalPages: 1, summary: { totalOrders: 0, totalSales: 0, statusCounts: {} } },
   products: [],
   categories: [],
+  banners: [],
   coupons: [],
   reels: [],
   payments: { items: [], page: 1, limit: 20, total: 0, totalPages: 1, summary: { statusCounts: {} } },
@@ -76,7 +80,7 @@ function setDashboardSectionPath(section) {
 
 
 function visibleNavItems(mode) {
-  return mode === 'merchant' ? navItems.filter(([key]) => !['stores', 'packages'].includes(key)) : navItems;
+  return mode === 'merchant' ? navItems.filter(([key]) => !['stores', 'packages', 'banners'].includes(key)) : navItems;
 }
 
 function Sidebar({ active, onChange, mode }) {
@@ -87,8 +91,7 @@ function Sidebar({ active, onChange, mode }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.logoBlock}>
-        <Text style={styles.logoText}>خان</Text>
-        <Text style={styles.logoSub}>K H A N</Text>
+        <KhanWordmark variant="mono" width={158} />
       </View>
       <View style={styles.navList}>
         {visibleNavItems(mode).map(([key, label, glyph]) => {
@@ -240,6 +243,7 @@ export default function DashboardWorkspace() {
   const [selectedStoreId, setSelectedStoreId] = useState(null);
   const [editingPackage, setEditingPackage] = useState(null);
   const [editingCategory, setEditingCategory] = useState(null);
+  const [editingBanner, setEditingBanner] = useState(null);
   const [saving, setSaving] = useState(false);
   const [actionBusy, setActionBusy] = useState('');
   const [ordersPage, setOrdersPage] = useState(1);
@@ -282,7 +286,7 @@ export default function DashboardWorkspace() {
 
       const adminSession = await authApi.ensureAdminSession();
       setSession(adminSession);
-      const [stores, packages, orders, payments, users, reviews, deliveryEvents, categories, products] = await Promise.all([
+      const [stores, packages, orders, payments, users, reviews, deliveryEvents, categories, products, bannerResult] = await Promise.all([
         adminApi.stores(),
         adminApi.packages(),
         adminApi.orders({ page: ordersPage, limit: 20 }),
@@ -292,6 +296,7 @@ export default function DashboardWorkspace() {
         adminApi.deliveryEvents(),
         catalogApi.categories(),
         adminApi.products(),
+        adminApi.banners().catch(() => []),
       ]);
 
       const merchantResults = await Promise.allSettled([
@@ -315,6 +320,7 @@ export default function DashboardWorkspace() {
         reviews,
         deliveryEvents,
         products,
+        banners: bannerResult,
         coupons,
         reels,
         wallet,
@@ -351,6 +357,10 @@ export default function DashboardWorkspace() {
         if (editingCategory) await adminApi.updateCategory(editingCategory.id, payload);
         else await adminApi.createCategory(payload);
       }
+      if (createType === 'banner') {
+        if (editingBanner) await adminApi.updateBanner(editingBanner.id, payload);
+        else await adminApi.createBanner(payload);
+      }
       if (createType === 'store') await adminApi.createStore(payload);
       if (createType === 'subscription') await adminApi.assignStorePackage(selectedStoreId, payload.packageId);
       if (createType === 'package') {
@@ -362,6 +372,7 @@ export default function DashboardWorkspace() {
       setSelectedStoreId(null);
       setEditingPackage(null);
       setEditingCategory(null);
+      setEditingBanner(null);
       await loadDashboard();
     } finally {
       setSaving(false);
@@ -395,6 +406,11 @@ export default function DashboardWorkspace() {
   const openCategoryEditor = (category) => {
     setEditingCategory(category);
     setCreateType('category');
+  };
+
+  const openBannerEditor = (banner = null) => {
+    setEditingBanner(banner);
+    setCreateType('banner');
   };
 
   const togglePackage = (storePackage) => runAction(
@@ -453,6 +469,12 @@ export default function DashboardWorkspace() {
     status === 'ACTIVE' ? 'تم تفعيل الكوبون.' : 'تم تعطيل الكوبون.',
   );
 
+  const toggleBanner = (banner) => runAction(
+    `banner-${banner.id}`,
+    () => adminApi.updateBanner(banner.id, { status: banner.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }),
+    banner.status === 'ACTIVE' ? 'تم تعطيل البنر.' : 'تم تفعيل البنر.',
+  );
+
   const merchantCanCreate = mode === 'merchant';
   const adminCanCreate = mode === 'admin';
   const changeOrdersPage = (page) => {
@@ -488,6 +510,7 @@ export default function DashboardWorkspace() {
     orders: <OrdersView data={data} canManage={adminCanCreate} onStatusChange={changeOrderStatus} actionBusy={actionBusy} onPageChange={changeOrdersPage} />,
     products: <ProductsView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('product')} onArchive={archiveProduct} actionBusy={actionBusy} />,
     categories: <CategoriesView data={data} canManage={adminCanCreate} onAdd={() => setCreateType('category')} onEdit={openCategoryEditor} onUpdateImage={updateCategoryImage} actionBusy={actionBusy} />,
+    banners: <BannersView data={data} canManage={adminCanCreate} onAdd={() => openBannerEditor()} onEdit={openBannerEditor} onToggle={toggleBanner} actionBusy={actionBusy} />,
     reels: <ReelsView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('reel')} />,
     offers: <OffersView data={data} canManage={merchantCanCreate} onAdd={() => setCreateType('coupon')} onToggleCoupon={toggleCoupon} actionBusy={actionBusy} />,
     customers: <CustomersView data={data} currentUserId={session?.user?.id} onUserStatus={changeUserStatus} onReviewStatus={changeReviewStatus} actionBusy={actionBusy} onUsersPageChange={changeUsersPage} onReviewsPageChange={changeReviewsPage} />,
@@ -543,6 +566,7 @@ export default function DashboardWorkspace() {
             setSelectedStoreId(null);
             setEditingPackage(null);
             setEditingCategory(null);
+            setEditingBanner(null);
           }
         }}
         onSubmit={createEntity}
@@ -557,6 +581,15 @@ export default function DashboardWorkspace() {
         } : editingCategory ? {
           name: editingCategory.name,
           imageUrl: editingCategory.imageUrl || '',
+        } : editingBanner ? {
+          title: editingBanner.title,
+          subtitle: editingBanner.subtitle || '',
+          imageUrl: editingBanner.imageUrl || '',
+          ctaLabel: editingBanner.ctaLabel || '',
+          targetUrl: editingBanner.targetUrl || '',
+          productId: editingBanner.productId || '',
+          position: String(editingBanner.position ?? 0),
+          status: editingBanner.status || 'ACTIVE',
         } : null}
       />
     </View>

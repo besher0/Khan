@@ -58,17 +58,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 18,
   },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0,
-  },
-  logoSub: {
-    color: '#DDEFEA',
-    fontSize: 10,
-    marginTop: 2,
-  },
   navList: {
     gap: 5,
   },
