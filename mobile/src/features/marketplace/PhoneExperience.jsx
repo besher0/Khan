@@ -920,7 +920,7 @@ export default function PhoneExperience() {
         saving={profileSaving}
         error={profileError}
         onSave={handleUpdateProfile}
-        onBack={() => setScreen('account')}
+        onBack={() => setScreen('home')}
       />
     ),
     search: (
@@ -948,7 +948,7 @@ export default function PhoneExperience() {
         loading={collectionLoading}
         error={collectionError}
         onRetry={() => openCollection(collectionType, collectionBackScreen)}
-        onBack={() => setScreen(collectionBackScreen)}
+        onBack={() => setScreen('home')}
         onOpenReel={openReel}
         onCopyCoupon={copyCoupon}
       />
@@ -1000,7 +1000,7 @@ export default function PhoneExperience() {
         cart={cart}
         couponCode={cartCouponCode}
         coupons={catalog.coupons || []}
-        onBack={() => setScreen('cart')}
+        onBack={() => setScreen('home')}
         onComplete={completeCheckout}
         submitting={checkoutLoading}
       />
@@ -1011,7 +1011,7 @@ export default function PhoneExperience() {
         orders={orders}
         loading={ordersLoading}
         error={ordersError}
-        onBack={() => setScreen('account')}
+        onBack={() => setScreen('home')}
         onOpenOrder={openOrder}
         onReorder={handleReorder}
       />
@@ -1020,7 +1020,7 @@ export default function PhoneExperience() {
       <OrderTrackingScreen
         order={selectedOrder}
         confirming={confirmingDelivery}
-        onBack={() => setScreen('orders')}
+        onBack={() => setScreen('home')}
         onConfirmDelivery={handleConfirmDelivery}
         onSupport={() => setToast('المساعدة والدعم قريبًا')}
       />

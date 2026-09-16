@@ -24,6 +24,7 @@ const APP_FONT_FAMILY = Platform.select({
   web: 'Cairo',
   default: 'Cairo_400Regular',
 });
+const SPLASH_SHOWN_STORAGE_KEY = 'khan:splash-shown';
 
 let defaultFontApplied = false;
 
@@ -237,9 +238,25 @@ function getWorkspaceFromPath() {
   return 'marketplace';
 }
 
+function shouldShowSplash(workspace) {
+  if (workspace !== 'marketplace') return false;
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return true;
+
+  try {
+    const { sessionStorage } = window;
+    if (!sessionStorage) return true;
+    if (sessionStorage.getItem(SPLASH_SHOWN_STORAGE_KEY) === 'true') return false;
+    sessionStorage.setItem(SPLASH_SHOWN_STORAGE_KEY, 'true');
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
 export default function AppRoot() {
   const workspace = useMemo(getWorkspaceFromPath, []);
-  const [showSplash, setShowSplash] = useState(workspace === 'marketplace');
+  const [showSplash, setShowSplash] = useState(() => shouldShowSplash(workspace));
   const fontsLoaded = useCairoFonts();
 
   if (fontsLoaded || Platform.OS === 'web') {

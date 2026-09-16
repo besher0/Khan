@@ -11,16 +11,23 @@
     ],
     "android": {
       "package": "com.khan.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "permissions": []
     },
     "ios": {
       "bundleIdentifier": "com.khan.app"
     },
     "web": {
       "bundler": "metro"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "265d8409-6059-4759-9ec2-b9dcdd28bfa5"
+      }
     }
   }
 }

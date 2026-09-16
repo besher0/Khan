@@ -1209,7 +1209,8 @@ export const styles = StyleSheet.create({
   },
   cartItem: {
     position: 'relative',
-    minHeight: 115,
+    height: 160,
+    width: 370,
     marginBottom: 18,
     padding: 8,
     borderRadius: 16,
