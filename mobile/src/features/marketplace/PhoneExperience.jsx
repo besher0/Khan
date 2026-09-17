@@ -46,18 +46,30 @@ const bottomTabs = [
   { key: 'home', label: 'الرئيسية', icon: Icons.Home, screen: 'home' },
 ];
 
-function CartTabIcon({ size = 21, color = palette.green }) {
+function CartTabIcon({ size = 24, color = '#6B6B6B' }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+    >
       <Path
-        d="M4.8 5.8h2.1l1.6 8.6h8.5c1 0 1.8-.7 2.1-1.7l1-4.4H8.1"
-        stroke={color}
-        strokeWidth={2.25}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M3 3.25C2.58579 3.25 2.25 3.58579 2.25 4C2.25 4.41421 2.58579 4.75 3 4.75C3.81705 4.75 4.52448 5.31748 4.70172 6.11507L5.13165 8.04975C5.13477 8.09674 5.14235 8.14372 5.15449 8.19008L5.20944 8.39979L5.26786 8.6627C5.27935 8.7144 5.29592 8.76366 5.31693 8.81006L6.9921 15.2039C7.53947 17.293 9.42732 18.75 11.587 18.75H16.7506C19.3739 18.75 21.5006 16.6234 21.5006 14V11.2907C21.5006 10.7268 21.4193 10.0465 21.0367 9.44622C20.1758 8.0956 18.674 7.25 17.0314 7.25H6.49052L6.166 5.78968C5.83625 4.30578 4.5201 3.25 3 3.25ZM8.44313 14.8237L6.85182 8.75H17.0314C18.1549 8.75 19.1827 9.32834 19.7718 10.2525C19.931 10.5023 20.0006 10.8465 20.0006 11.2907V14C20.0006 15.7949 18.5455 17.25 16.7506 17.25H11.587C10.1093 17.25 8.81764 16.2531 8.44313 14.8237Z"
+        fill={color}
       />
-      <Circle cx="10.2" cy="18.3" r="1.2" fill={color} />
-      <Circle cx="17.1" cy="18.3" r="1.2" fill={color} />
+
+      <Path
+        d="M17 22C17.5523 22 18 21.5523 18 21C18 20.4477 17.5523 20 17 20C16.4477 20 16 20.4477 16 21C16 21.5523 16.4477 22 17 22Z"
+        fill={color}
+      />
+
+      <Path
+        d="M10 21C10 21.5523 9.55228 22 9 22C8.44772 22 8 21.5523 8 21C8 20.4477 8.44772 20 9 20C9.55228 20 10 20.4477 10 21Z"
+        fill={color}
+      />
     </Svg>
   );
 }
@@ -102,7 +114,7 @@ function BottomNav({ screen, onChange, cartCount }) {
           >
             <View style={[item.center ? styles.centerButton : styles.navIconWrap, active && styles.navIconActive]}>
               {item.key === 'cart' ? (
-                <CartTabIcon size={21} color={palette.green} />
+                <CartTabIcon size={24} color={active ? palette.green : '#6B6B6B'} />
               ) : item.key === 'shop' ? (
                 <ShopTabIcon size={21} color={active ? palette.green : palette.muted} />
               ) : (

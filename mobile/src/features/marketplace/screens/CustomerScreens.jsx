@@ -1045,8 +1045,8 @@ export function AccountScreen({
       </View>
 
       <TouchableOpacity style={styles.accountLogoutButton} onPress={onLogout} activeOpacity={0.8}>
+                <AppIcon icon={Icons.LogOut} size={20} color={palette.danger} />
         <RText style={styles.accountLogoutText}>تسجيل الخروج</RText>
-        <AppIcon icon={Icons.LogOut} size={20} color={palette.danger} />
       </TouchableOpacity>
     </ScreenScroll>
   );

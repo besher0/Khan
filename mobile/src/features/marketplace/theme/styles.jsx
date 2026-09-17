@@ -435,12 +435,12 @@ export const styles = StyleSheet.create({
   },
   rtlHorizontalContent: {
     flexDirection: 'row-reverse',
+    minWidth: '100%',
   },
   rtlHorizontalItem: {
    // transform: [{ scaleX: -1 }],
   },
   horizontalCards: {
-    flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 2,
     paddingBottom: 4,
@@ -1163,7 +1163,7 @@ export const styles = StyleSheet.create({
     paddingBottom: 28,
   },
   cartTopBar: {
-    height: 120,
+    height: 92,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1235,8 +1235,9 @@ export const styles = StyleSheet.create({
   },
   cartItem: {
     position: 'relative',
-    height: 160,
-    width: 370,
+    height: 116,
+    width: '100%',
+    maxWidth: 370,
     marginBottom: 18,
     padding: 8,
     borderRadius: 16,
@@ -1250,6 +1251,7 @@ export const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
+    alignSelf: 'center',
   },
   cartItemCheckbox: {
     position: 'absolute',
@@ -1272,8 +1274,8 @@ export const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
     minWidth: 0,
-    paddingTop: 12,
-    paddingBottom: 40,
+    paddingTop: 3,
+    paddingBottom: 30,
   },
   cartItemTitle: {
     alignSelf: 'stretch',
