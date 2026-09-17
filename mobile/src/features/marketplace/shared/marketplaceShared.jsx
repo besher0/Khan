@@ -58,18 +58,42 @@ export function RText({ children, style, ...props }) {
   );
 }
 
-export function RtlHorizontalScroll({ children, contentContainerStyle, style }) {
+export function RtlHorizontalScroll({
+  children,
+  contentContainerStyle,
+  style,
+  refreshKey,
+}) {
   const items = React.Children.toArray(children);
+  const scrollRef = React.useRef(null);
+
+  React.useEffect(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: false });
+    });
+  }, [refreshKey]);
 
   return (
     <ScrollView
+      ref={scrollRef}
       horizontal
       showsHorizontalScrollIndicator={false}
       style={[styles.rtlHorizontalScroll, style]}
-      contentContainerStyle={[styles.rtlHorizontalContent, contentContainerStyle]}
+      contentContainerStyle={[
+        styles.rtlHorizontalContent,
+        contentContainerStyle,
+      ]}
+      onContentSizeChange={() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+      }}
+      onTouchStart={(event) => event?.stopPropagation?.()}
+      onTouchEnd={(event) => event?.stopPropagation?.()}
     >
       {items.map((child, index) => (
-        <View key={child.key || `rtl-${index}`} style={styles.rtlHorizontalItem}>
+        <View
+          key={child.key || `rtl-${index}`}
+          style={styles.rtlHorizontalItem}
+        >
           {child}
         </View>
       ))}
