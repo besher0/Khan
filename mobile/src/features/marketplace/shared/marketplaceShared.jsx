@@ -146,6 +146,116 @@ export function normalizeProduct(product, index = 0) {
   };
 }
 
+export function normalizeStore(store, index = 0) {
+  if (!store?.id || !store?.name) return null;
+  return {
+    id: store.id,
+    name: store.name,
+    description: store.description || '',
+    logo: resolveRemoteImage(store.logoUrl),
+    banner: resolveRemoteImage(store.bannerUrl),
+    rating: Number(store.ratingAvg || 0),
+    ratingCount: Number(store.ratingCount || 0),
+    productCount: Number(store._count?.products ?? 0),
+    openingTime: store.openingTime || '',
+    closingTime: store.closingTime || '',
+    coupons: (store.coupons || []).map((coupon, couponIndex) => normalizeCoupon(coupon, couponIndex)).filter(Boolean),
+    categories: (store.categories || []).map((category, categoryIndex) => normalizeCategory(category, categoryIndex)).filter(Boolean),
+    reviews: (store.reviews || []).map((review) => normalizeReview(review)).filter(Boolean),
+    raw: store,
+  };
+}
+
+export function normalizeReview(review) {
+  if (!review?.id) return null;
+  return {
+    id: review.id,
+    rating: Number(review.rating || 0),
+    comment: review.comment || '',
+    images: (review.imageUrls || []).map((url) => resolveRemoteImage(url)).filter(Boolean),
+    createdAt: review.createdAt,
+    userName: [review.user?.firstName, review.user?.lastName].filter(Boolean).join(' ') || 'عميل خان',
+    productId: review.productId || null,
+    raw: review,
+  };
+}
+
+export function reviewSummaryOf(payload) {
+  const items = Array.isArray(payload) ? payload : payload?.items || [];
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let total = 0;
+  let weighted = 0;
+
+  items.forEach((review) => {
+    const rating = Math.max(1, Math.min(5, Number(review.rating) || 0));
+    distribution[rating] += 1;
+    total += 1;
+    weighted += rating;
+  });
+
+  return {
+    items: items.map((review) => normalizeReview(review)).filter(Boolean),
+    total,
+    average: payload && !Array.isArray(payload) && payload.average != null
+      ? Number(payload.average)
+      : total
+        ? Math.round((weighted / total) * 10) / 10
+        : 0,
+    distribution,
+  };
+}
+
+export function formatReviewDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`;
+}
+
+export function StarsRow({ value = 0, size = 13, spacing = 2 }) {
+  return (
+    <View style={[styles.starsRow, { gap: spacing }]}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <AppIcon
+          key={`star-${star}`}
+          icon={Icons.Star}
+          size={size}
+          color={star <= Math.round(value) ? palette.amber : '#D6DBDF'}
+          fill={star <= Math.round(value) ? palette.amber : 'transparent'}
+          strokeWidth={1.6}
+        />
+      ))}
+    </View>
+  );
+}
+
+export function StoreCard({ store, index = 0, style, onPress }) {
+  return (
+    <TouchableOpacity style={[styles.storeMiniCard, style]} onPress={() => onPress?.(store)} activeOpacity={0.85}>
+      {store.banner || store.logo ? (
+        <Image source={store.banner || store.logo} style={styles.storeMiniImage} />
+      ) : (
+        <View style={[styles.storeMiniImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: palette.greenSoft }]}>
+          <AppIcon icon={Icons.Store || Icons.ShoppingBag} size={26} color={palette.green} />
+        </View>
+      )}
+      <RText numberOfLines={1} style={styles.storeMiniTitle}>{store.name}</RText>
+      <RText numberOfLines={1} style={styles.storeMiniSub}>
+        {store.productCount > 0 ? `${store.productCount} منتج` : 'متجر خان'}
+      </RText>
+      <View style={styles.storeMiniRating}>
+        <RText style={styles.storeMiniRatingText}>({store.ratingCount})</RText>
+        <RText style={styles.storeMiniRatingText}>{Number(store.rating || 0).toFixed(1)}</RText>
+        <AppIcon icon={Icons.Star} size={11} color={palette.amber} fill={palette.amber} strokeWidth={1.6} />
+      </View>
+      <TouchableOpacity style={styles.visitButton} onPress={() => onPress?.(store)} activeOpacity={0.85}>
+        <RText style={styles.visitText}>زيارة المتجر</RText>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
 export function normalizeCoupon(coupon, index = 0) {
   if (!coupon?.code) return null;
   const label = coupon.type === 'PERCENT' ? `خصم ${coupon.value}%` : formatSyp(coupon.value);
@@ -154,7 +264,10 @@ export function normalizeCoupon(coupon, index = 0) {
     code: coupon.code,
     label,
     storeId: coupon.storeId || coupon.store?.id,
+    scope: coupon.storeId || coupon.store?.id ? 'store' : 'platform',
+    storeName: coupon.store?.name || '',
     color: couponColors[index % couponColors.length],
+    colorIndex: index,
     raw: coupon,
   };
 }
@@ -407,6 +520,33 @@ export function ProductCard({
         <CartIcon size={16} color={palette.green} />
       </TouchableOpacity>
     </TouchableOpacity>
+  );
+}
+
+export function StoreHeaderSearch({ title, query, onQueryChange, onSubmit, onBack }) {
+  return (
+    <View style={[styles.header, styles.headerCompact]}>
+      {onBack ? (
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+      ) : null}
+      {title ? <RText style={styles.headerTitle}>{title}</RText> : null}
+      <View style={styles.searchWrap}>
+        <TouchableOpacity style={styles.searchButton} onPress={onSubmit}>
+          <AppIcon icon={Icons.Search} size={18} color={palette.white} />
+        </TouchableOpacity>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="ابحث عن متجر أو منتج..."
+          placeholderTextColor="#A8AFB7"
+          textAlign="right"
+          value={query}
+          onChangeText={onQueryChange}
+          onSubmitEditing={onSubmit}
+        />
+      </View>
+    </View>
   );
 }
 

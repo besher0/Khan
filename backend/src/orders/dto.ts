@@ -2,6 +2,7 @@ import { PaymentMethod } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
   ValidateNested,
@@ -24,6 +25,40 @@ export class CheckoutAddressDto {
 
   @IsString()
   phone: string;
+
+  @IsOptional()
+  @IsString()
+  governorate?: string;
+
+  @IsOptional()
+  @IsString()
+  area?: string;
+
+  @IsOptional()
+  @IsString()
+  street?: string;
+
+  @IsOptional()
+  @IsString()
+  building?: string;
+
+  @IsOptional()
+  @IsString()
+  floor?: string;
+
+  @IsOptional()
+  @IsString()
+  additionalInfo?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  longitude?: number;
 }
 
 export class CheckoutDto {

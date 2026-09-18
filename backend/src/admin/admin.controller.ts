@@ -24,6 +24,7 @@ import {
   CreateCategoryDto,
   CreateDeliveryEventDto,
   CreateHomeBannerDto,
+  CreatePlatformCouponDto,
   UpdateOrderStatusDto,
   UpdateStoreStatusDto,
   UpdateStorePackageDto,
@@ -97,6 +98,16 @@ export class AdminController {
   @Post('categories')
   createCategory(@Body() dto: CreateCategoryDto) {
     return this.admin.createCategory(dto);
+  }
+
+  @Post('coupons/platform')
+  createPlatformCoupon(@Body() dto: CreatePlatformCouponDto) {
+    return this.admin.createPlatformCoupon(dto);
+  }
+
+  @Get('coupons/platform')
+  platformCoupons() {
+    return this.admin.platformCoupons();
   }
 
   @Patch('categories/:id')

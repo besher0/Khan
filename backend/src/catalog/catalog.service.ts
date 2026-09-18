@@ -27,7 +27,13 @@ export class CatalogService {
         orderBy: { createdAt: 'desc' },
       }),
       this.prisma.coupon.findMany({
-        where: { status: CouponStatus.ACTIVE, store: { status: StoreStatus.APPROVED } },
+        where: {
+          status: CouponStatus.ACTIVE,
+          OR: [
+            { storeId: null },
+            { store: { status: StoreStatus.APPROVED } },
+          ],
+        },
         include: { store: true },
         take: 8,
         orderBy: { createdAt: 'desc' },
@@ -112,6 +118,20 @@ export class CatalogService {
     return product;
   }
 
+  /**
+   * Public list of approved stores used by the "المتاجر" screen.
+   */  
+  stores() {
+    return this.prisma.store.findMany({
+      where: { status: StoreStatus.APPROVED },
+      include: {
+        _count: { select: { products: { where: { status: ProductStatus.ACTIVE } } } },
+      },
+      orderBy: [{ ratingCount: 'desc' }, { createdAt: 'desc' }],
+      take: 100,
+    });
+  }
+
   async store(id: string) {
     const store = await this.prisma.store.findFirst({
       where: { id, status: StoreStatus.APPROVED },
@@ -123,6 +143,7 @@ export class CatalogService {
           orderBy: { createdAt: 'desc' },
           take: 20,
         },
+        _count: { select: { products: { where: { status: ProductStatus.ACTIVE } } } },
       },
     });
 
@@ -130,7 +151,16 @@ export class CatalogService {
       throw new NotFoundException('Store not found');
     }
 
-    return store;
+    const categories = await this.prisma.category.findMany({
+      where: {
+        products: {
+          some: { storeId: id, status: ProductStatus.ACTIVE },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return { ...store, categories };
   }
 
   async search(query: SearchQueryDto) {
@@ -189,7 +219,10 @@ export class CatalogService {
   async coupons(query: ProductQueryDto) {
     const where = {
       status: CouponStatus.ACTIVE,
-      store: { status: StoreStatus.APPROVED },
+      OR: [
+        { storeId: null },
+        { store: { status: StoreStatus.APPROVED } },
+      ],
       ...(query.storeId ? { storeId: query.storeId } : {}),
       ...(query.q ? { code: { contains: query.q, mode: 'insensitive' as const } } : {}),
     };

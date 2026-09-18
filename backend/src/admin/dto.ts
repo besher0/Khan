@@ -1,4 +1,6 @@
+import { Type } from 'class-transformer';
 import {
+  CouponType,
   DeliveryEventSource,
   OrderStatus,
   PaymentStatus,
@@ -6,6 +8,7 @@ import {
   UserStatus,
 } from '@prisma/client';
 import {
+  IsDateString,
   IsEnum,
   IsBoolean,
   IsInt,
@@ -258,4 +261,43 @@ export class CreateDeliveryEventDto {
   @IsOptional()
   @IsEnum(DeliveryEventSource)
   source?: DeliveryEventSource;
+}
+
+export class CreatePlatformCouponDto {
+  @IsString()
+  code: string;
+
+  @IsEnum(CouponType)
+  type: CouponType;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  value: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minOrderAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  maxDiscountAmount?: number;
+
+  @IsOptional()
+  @IsDateString()
+  startsAt?: string;
+
+  @IsOptional()
+  @IsDateString()
+  endsAt?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  usageLimit?: number;
 }

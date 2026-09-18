@@ -26,6 +26,11 @@ export class CatalogController {
     return this.catalog.product(id);
   }
 
+  @Get('stores')
+  stores() {
+    return this.catalog.stores();
+  }
+
   @Get('stores/:id')
   store(@Param('id') id: string) {
     return this.catalog.store(id);

@@ -11,7 +11,7 @@ const safeAreaContextPath = resolveFromRoot('node_modules/react-native-safe-area
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    extensions: ['.web.js', '.web.jsx', '.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
+    extensions: ['.web.js', '.web.jsx', '.web.ts', '.web.tsx', '.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: [
       {
         find: 'react-native/Libraries/Utilities/codegenNativeComponent',
@@ -37,7 +37,7 @@ export default defineConfig({
   },
   optimizeDeps: {
     esbuildOptions: {
-      resolveExtensions: ['.web.js', '.web.jsx', '.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
+      resolveExtensions: ['.web.js', '.web.jsx', '.web.ts', '.web.tsx', '.mjs', '.js', '.jsx', '.ts', '.tsx', '.json'],
     },
   },
 });

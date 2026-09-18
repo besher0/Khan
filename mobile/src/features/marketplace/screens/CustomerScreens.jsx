@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Image, ImageBackground, ScrollView, TextInput, TouchableOpacity, View } from 'react-native';
 import { styles } from '../theme/styles';
 import * as Icons from '../../../../icons';
+import { couponsApi } from '../../../services/api';
 import {
   AppIcon,
   CouponCard,
@@ -15,7 +16,13 @@ import {
 } from '../shared/marketplaceShared';
 export { HomeScreen } from './HomeScreen';
 export { SearchScreen } from './SearchScreen';
-export { StoreScreen } from './StoreScreen';
+export {
+  AllStoresScreen,
+  RateStoreScreen,
+  SavedStoresScreen,
+  StoreDetailsScreen,
+  StoreReviewsScreen,
+} from './StoreScreen';
 export { CollectionScreen } from './CollectionScreen';
 export { ProductDetailsScreen } from './ProductDetailsScreen';
 export { ReelsScreen } from './ReelsScreen';
@@ -131,16 +138,35 @@ function calculateCartCouponDiscount(coupon, subtotal) {
   return Math.min(subtotal, maxDiscountAmount ? Math.min(discount, maxDiscountAmount) : discount);
 }
 
-function CartCouponBanner({ coupons = [], subtotal, appliedCouponCode, onApplyCoupon }) {
+function CartCouponBanner({
+  coupons = [],
+  cartStoreId,
+  subtotal,
+  appliedCouponCode,
+  appliedCouponDiscount = 0,
+  onApplyCoupon,
+  onOpenMyCoupons,
+  feedback,
+}) {
   const [couponCode, setCouponCode] = useState(appliedCouponCode || '');
+  const [pickerVisible, setPickerVisible] = useState(false);
   const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === appliedCouponCode?.toUpperCase());
+
+  useEffect(() => {
+    setCouponCode(appliedCouponCode || '');
+  }, [appliedCouponCode]);
 
   const applyCoupon = () => {
     const code = couponCode.trim().toUpperCase();
-    const coupon = coupons.find((item) => item.code?.toUpperCase() === code);
-    const discount = calculateCartCouponDiscount(coupon, subtotal);
-    onApplyCoupon?.(coupon && discount > 0 ? code : '');
+    if (!code) return;
+    onApplyCoupon?.(code, 'code');
   };
+
+  const relevantCoupons = coupons.filter((coupon) => {
+    const scope = coupon.scope || 'store';
+    if (scope === 'platform') return true;
+    return !cartStoreId || coupon.storeId === cartStoreId;
+  });
 
   return (
     <View style={styles.cartCouponBanner}>
@@ -158,13 +184,72 @@ function CartCouponBanner({ coupons = [], subtotal, appliedCouponCode, onApplyCo
             autoCorrect={false}
             textAlign="right"
           />
-          {appliedCoupon ? <RText style={styles.cartCouponApplied}>تم تطبيق {appliedCoupon.code}</RText> : null}
+          {appliedCoupon ? (
+            <RText style={styles.cartCouponApplied}>
+              تم تطبيق {appliedCoupon.code}
+              {appliedCouponDiscount > 0 ? ` — خصم ${formatCartSyp(appliedCouponDiscount)}` : ''}
+            </RText>
+          ) : null}
+          {feedback ? <RText style={styles.cartCouponFeedbackError}>{feedback}</RText> : null}
         </View>
       </View>
-      <TouchableOpacity style={styles.cartCouponAction} onPress={applyCoupon}>
-        <AppIcon icon={Icons.ChevronLeft} size={16} color={palette.amber} />
-        <RText style={styles.cartCouponActionText}>{appliedCoupon ? 'تحديث' : 'إضافة كود'}</RText>
-      </TouchableOpacity>
+      <View style={styles.cartCouponActionsRow}>
+        <TouchableOpacity style={styles.cartCouponAction} onPress={applyCoupon}>
+          <AppIcon icon={Icons.ChevronLeft} size={16} color={palette.amber} />
+          <RText style={styles.cartCouponActionText}>{appliedCoupon ? 'تحديث' : 'تطبيق'}</RText>
+        </TouchableOpacity>
+        {appliedCoupon ? (
+          <TouchableOpacity
+            style={styles.cartCouponAction}
+            onPress={() => {
+              setCouponCode('');
+              onApplyCoupon?.('', 'remove');
+            }}
+          >
+            <AppIcon icon={Icons.X} size={14} color={palette.danger} />
+            <RText style={[styles.cartCouponActionText, { color: palette.danger }]}>إزالة</RText>
+          </TouchableOpacity>
+        ) : null}
+        {relevantCoupons.length && onOpenMyCoupons ? (
+          <TouchableOpacity style={styles.cartCouponAction} onPress={() => setPickerVisible(true)}>
+            <AppIcon icon={Icons.Ticket} size={14} color={palette.green} />
+            <RText style={[styles.cartCouponActionText, { color: palette.green }]}>اختر من كوبوناتي</RText>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {pickerVisible ? (
+        <View style={styles.cartCouponPickerOverlay}>
+          <TouchableOpacity style={styles.cartCouponPickerBackdrop} onPress={() => setPickerVisible(false)} />
+          <View style={styles.cartCouponPickerSheet}>
+            <View style={styles.cartCouponPickerHeader}>
+              <TouchableOpacity onPress={() => setPickerVisible(false)} hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                <AppIcon icon={Icons.X} size={18} color={palette.ink} />
+              </TouchableOpacity>
+              <RText style={styles.cartCouponPickerTitle}>اختر من كوبوناتي</RText>
+              <View style={{ width: 18 }} />
+            </View>
+            <ScrollView style={styles.cartCouponPickerList}>
+              {relevantCoupons.map((coupon) => (
+                <TouchableOpacity
+                  key={`picker-${coupon.id}`}
+                  style={styles.cartCouponPickerItem}
+                  onPress={() => {
+                    setPickerVisible(false);
+                    onApplyCoupon?.(coupon.code, 'picker', coupon);
+                  }}
+                >
+                  <View style={styles.cartCouponPickerTexts}>
+                    <RText style={styles.cartCouponPickerLabel}>{coupon.label}</RText>
+                    <RText style={styles.cartCouponPickerCode}>كود: {coupon.code}</RText>
+                  </View>
+                  <AppIcon icon={Icons.ChevronLeft} size={16} color={palette.green} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -265,7 +350,11 @@ export function CartScreen({
   favorites = [],
   coupons = [],
   couponCode,
+  appliedCoupon = null,
+  appliedCouponDiscount = 0,
+  couponFeedback = '',
   onApplyCoupon,
+  onOpenMyCoupons,
   onUpdateQuantity,
   onRemove,
   onContinueShopping,
@@ -287,8 +376,15 @@ export function CartScreen({
   );
   const itemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const shippingCost = 0;
-  const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === couponCode?.toUpperCase());
-  const discountTotal = calculateCartCouponDiscount(appliedCoupon, subtotal);
+  const cartStoreId = cart[0]?.product?.storeId || cart[0]?.product?.raw?.storeId || null;
+  // Prefer the server-validated discount; fall back to the local preview only
+  // when the backend response has not arrived yet.
+  const discountTotal =
+    appliedCoupon && appliedCoupon.code?.toUpperCase() === couponCode?.toUpperCase() && appliedCouponDiscount > 0
+      ? Math.min(appliedCouponDiscount, subtotal)
+      : appliedCoupon
+        ? calculateCartCouponDiscount(appliedCoupon, subtotal)
+        : 0;
   const total = Math.max(0, subtotal + shippingCost - discountTotal);
 
   if (!session) {
@@ -387,9 +483,13 @@ export function CartScreen({
 
         <CartCouponBanner
           coupons={coupons}
+          cartStoreId={cartStoreId}
           subtotal={subtotal}
           appliedCouponCode={couponCode}
+          appliedCouponDiscount={discountTotal}
           onApplyCoupon={onApplyCoupon}
+          onOpenMyCoupons={onOpenMyCoupons}
+          feedback={couponFeedback}
         />
         {showOrderSummary ? (
           <CartOrderSummary
@@ -408,7 +508,18 @@ export function CartScreen({
   );
 }
 
-export function CheckoutScreen({ cart, couponCode, coupons = [], onBack, onComplete, submitting }) {
+export function CheckoutScreen({
+  cart,
+  couponCode,
+  coupons = [],
+  addresses = [],
+  selectedAddressId,
+  onSelectAddress,
+  onAddNewAddress,
+  onBack,
+  onComplete,
+  submitting,
+}) {
   const [payment, setPayment] = useState('COD');
   const [city, setCity] = useState('');
   const [address, setAddress] = useState('');
@@ -417,6 +528,27 @@ export function CheckoutScreen({ cart, couponCode, coupons = [], onBack, onCompl
   const appliedCoupon = coupons.find((coupon) => coupon.code?.toUpperCase() === couponCode?.toUpperCase());
   const discountTotal = calculateCartCouponDiscount(appliedCoupon, subtotal);
   const total = Math.max(0, subtotal - discountTotal);
+  const selectedAddress = addresses.find((item) => item.id === selectedAddressId) || null;
+  const [useSaved, setUseSaved] = useState(Boolean(selectedAddress));
+
+  useEffect(() => {
+    if (selectedAddress) {
+      setUseSaved(true);
+      setCity(selectedAddress.governorate || selectedAddress.city || '');
+      setAddress(
+        [
+          selectedAddress.area,
+          selectedAddress.street,
+          selectedAddress.building,
+          selectedAddress.floor ? `الطابق ${selectedAddress.floor}` : '',
+          selectedAddress.additionalInfo,
+        ]
+          .filter(Boolean)
+          .join('، '),
+      );
+      setPhone(selectedAddress.phone || '');
+    }
+  }, [selectedAddress?.id]);
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.checkoutContent}>
@@ -429,11 +561,81 @@ export function CheckoutScreen({ cart, couponCode, coupons = [], onBack, onCompl
       </View>
 
       <RText style={styles.checkoutSectionTitle}>عنوان التوصيل</RText>
-      <View style={styles.checkoutPanel}>
-        <AuthField label="المدينة" value={city} onChangeText={setCity} placeholder="دمشق" icon={Icons.MapPin} />
-        <AuthField label="العنوان بالتفصيل" value={address} onChangeText={setAddress} placeholder="الحي، الشارع، البناء" icon={Icons.Home} />
-        <AuthField label="رقم الهاتف" value={phone} onChangeText={setPhone} placeholder="09XXXXXXXX" icon={Icons.Phone} />
-      </View>
+      {addresses.length ? (
+        <>
+          <View style={styles.checkoutSavedToggle}>
+            <TouchableOpacity
+              style={styles.checkoutSavedOption}
+              onPress={() => {
+                setUseSaved(true);
+                if (selectedAddress) {
+                  setCity(selectedAddress.governorate || selectedAddress.city || '');
+                  setAddress(
+                    [
+                      selectedAddress.area,
+                      selectedAddress.street,
+                      selectedAddress.building,
+                      selectedAddress.floor ? `الطابق ${selectedAddress.floor}` : '',
+                      selectedAddress.additionalInfo,
+                    ]
+                      .filter(Boolean)
+                      .join('، '),
+                  );
+                  setPhone(selectedAddress.phone || '');
+                }
+              }}
+            >
+              <View style={[styles.paymentRadio, useSaved && styles.paymentRadioActive]}>
+                {useSaved ? <View style={styles.paymentRadioDot} /> : null}
+              </View>
+              <RText style={styles.paymentTitle}>عنوان محفوظ</RText>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.checkoutSavedOption} onPress={() => setUseSaved(false)}>
+              <View style={[styles.paymentRadio, !useSaved && styles.paymentRadioActive]}>
+                {!useSaved ? <View style={styles.paymentRadioDot} /> : null}
+              </View>
+              <RText style={styles.paymentTitle}>عنوان جديد</RText>
+            </TouchableOpacity>
+          </View>
+          {useSaved ? (
+            <View style={styles.checkoutAddressList}>
+              {addresses.map((item) => {
+                const active = item.id === selectedAddressId;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.checkoutAddressOption, active && styles.checkoutAddressOptionActive]}
+                    onPress={() => onSelectAddress?.(item)}
+                  >
+                    <View style={[styles.paymentRadio, active && styles.paymentRadioActive]}>
+                      {active ? <View style={styles.paymentRadioDot} /> : null}
+                    </View>
+                    <View style={styles.checkoutAddressTexts}>
+                      <RText style={styles.checkoutAddressTitle}>
+                        {item.label || 'عنوان'} {item.isDefault ? '• الافتراضي' : ''}
+                      </RText>
+                      <RText style={styles.checkoutAddressSub} numberOfLines={2}>
+                        {[item.governorate || item.city, item.area, item.street].filter(Boolean).join(' - ')}
+                      </RText>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity style={styles.checkoutAddAddressLink} onPress={onAddNewAddress}>
+                <AppIcon icon={Icons.Plus} size={15} color={palette.green} strokeWidth={2.4} />
+                <RText style={styles.checkoutAddAddressText}>إضافة عنوان جديد</RText>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+        </>
+      ) : null}
+      {!useSaved || !addresses.length ? (
+        <View style={styles.checkoutPanel}>
+          <AuthField label="المدينة" value={city} onChangeText={setCity} placeholder="دمشق" icon={Icons.MapPin} />
+          <AuthField label="العنوان بالتفصيل" value={address} onChangeText={setAddress} placeholder="الحي، الشارع، البناء" icon={Icons.Home} />
+          <AuthField label="رقم الهاتف" value={phone} onChangeText={setPhone} placeholder="09XXXXXXXX" icon={Icons.Phone} />
+        </View>
+      ) : null}
 
       <RText style={styles.checkoutSectionTitle}>طريقة الدفع</RText>
       <View style={styles.paymentOptions}>
@@ -489,13 +691,21 @@ export function CheckoutScreen({ cart, couponCode, coupons = [], onBack, onCompl
 
       <TouchableOpacity
         style={styles.checkoutButton}
-        onPress={() =>
+        onPress={() => {
+          if (useSaved && selectedAddress) {
+            onComplete({
+              paymentMethod: payment,
+              couponCode: discountTotal > 0 ? couponCode : undefined,
+              addressId: selectedAddress.id,
+            });
+            return;
+          }
           onComplete({
             paymentMethod: payment,
             couponCode: discountTotal > 0 ? couponCode : undefined,
             address: { label: 'المنزل', city, line1: address, phone },
-          })
-        }
+          });
+        }}
       >
         <RText style={styles.checkoutText}>{submitting ? 'جاري تأكيد الطلب...' : 'تأكيد الطلب'}</RText>
         <AppIcon icon={Icons.CircleCheck} size={20} color={palette.white} />
@@ -859,6 +1069,36 @@ export function OrderDeliveredScreen({ order, submitting = false, onSubmitReview
   );
 }
 
+function AccountAddressStrip({ defaultAddress, onOpenAddresses }) {
+  if (!defaultAddress) {
+    return (
+      <TouchableOpacity style={styles.accountAddressCard} onPress={onOpenAddresses} activeOpacity={0.85}>
+        <View style={styles.accountAddressTexts}>
+          <RText style={styles.accountAddressTitle}>لم تضف عنوانًا بعد</RText>
+          <RText style={styles.accountAddressSub}>أضف عنوانك لتسهيل عملية التوصيل</RText>
+        </View>
+        <AppIcon icon={Icons.MapPin} size={20} color={palette.green} />
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <TouchableOpacity style={styles.accountAddressCard} onPress={onOpenAddresses} activeOpacity={0.85}>
+      <View style={styles.accountAddressTexts}>
+        <RText style={styles.accountAddressTitle}>
+          {defaultAddress.label || 'العنوان الافتراضي'}
+        </RText>
+        <RText style={styles.accountAddressSub} numberOfLines={2}>
+          {[defaultAddress.governorate || defaultAddress.city, defaultAddress.area, defaultAddress.street]
+            .filter(Boolean)
+            .join(' - ')}
+        </RText>
+      </View>
+      <AppIcon icon={Icons.MapPin} size={20} color={palette.green} />
+    </TouchableOpacity>
+  );
+}
+
 export function AccountScreen({
   session,
   catalog,
@@ -866,6 +1106,7 @@ export function AccountScreen({
   error,
   onRetry,
   favorites = [],
+  defaultAddress = null,
   onOpenAuth,
   onOpenProduct,
   onAddToCart,
@@ -874,6 +1115,7 @@ export function AccountScreen({
   onOpenNotifications,
   onOpenOrders,
   onOpenCoupons,
+  onOpenAddresses,
   onShowAll,
   onOpenSavedStores,
   onOpenSupport,
@@ -999,11 +1241,21 @@ export function AccountScreen({
         >
           <AppIcon icon={Icons.Bell} size={22} color={palette.amber} />
         </TouchableOpacity>
-        <View style={styles.accountLocation}>
+        <TouchableOpacity
+          style={styles.accountLocation}
+          onPress={onOpenAddresses}
+          activeOpacity={0.8}
+        >
           <AppIcon icon={Icons.ChevronDown} size={16} color={palette.amber} />
-          <RText style={styles.accountLocationText}>المنزل . الشعلان</RText>
+          <RText style={styles.accountLocationText} numberOfLines={1}>
+            {defaultAddress
+              ? [defaultAddress.label || defaultAddress.area, defaultAddress.area]
+                  .filter(Boolean)
+                  .join(' . ')
+              : 'أضف عنوانك'}
+          </RText>
           <AppIcon icon={Icons.MapPin} size={20} color={palette.amber} />
-        </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.accountProfileCard}>
@@ -1025,6 +1277,8 @@ export function AccountScreen({
           )}
         </View>
       </View>
+
+      <AccountAddressStrip defaultAddress={defaultAddress} onOpenAddresses={() => onOpenAddresses?.()} />
 
       <View style={styles.accountMenuCard}>
         {menuItems.map((item, index) => (
@@ -1048,6 +1302,80 @@ export function AccountScreen({
                 <AppIcon icon={Icons.LogOut} size={20} color={palette.danger} />
         <RText style={styles.accountLogoutText}>تسجيل الخروج</RText>
       </TouchableOpacity>
+    </ScreenScroll>
+  );
+}
+
+export function SupportScreen({ onBack }) {
+  const supportRows = [
+    { key: 'whatsapp', title: 'واتساب الدعم', subtitle: 'رد سريع خلال ساعات العمل', icon: Icons.MessageCircle || Icons.Send },
+    { key: 'phone', title: 'اتصل بنا', subtitle: '0999 999 999', icon: Icons.Phone },
+    { key: 'faq', title: 'الأسئلة الشائعة', subtitle: 'إجابات على أكثر الأسئلة تكراراً', icon: Icons.CircleHelp || Icons.HelpCircle },
+  ];
+
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>المساعدة والدعم</RText>
+        <View style={styles.detailsTopSpacer} />
+      </View>
+      <View style={styles.accountMenuCard}>
+        {supportRows.map((row, index) => (
+          <TouchableOpacity
+            key={row.key}
+            style={[styles.accountMenuRow, index < supportRows.length - 1 && styles.accountMenuRowBorder]}
+            activeOpacity={0.7}
+          >
+            <AppIcon icon={Icons.ChevronLeft} size={18} color={palette.ink} />
+            <View style={styles.accountMenuTexts}>
+              <RText style={styles.accountMenuTitle}>{row.title}</RText>
+              <RText style={styles.accountMenuSubtitle}>{row.subtitle}</RText>
+            </View>
+            <AppIcon icon={row.icon} size={22} color={palette.green} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <RText style={styles.collectionEmpty}>فريق خان جاهز لمساعدتك في أي وقت.</RText>
+    </ScreenScroll>
+  );
+}
+
+export function AboutScreen({ onBack }) {
+  return (
+    <ScreenScroll>
+      <View style={styles.detailsTopBar}>
+        <TouchableOpacity style={styles.detailsTopButton} onPress={onBack}>
+          <AppIcon icon={Icons.ArrowRight} size={19} color={palette.greenDark} />
+        </TouchableOpacity>
+        <RText style={styles.detailsHeaderTitle}>عن التطبيق</RText>
+        <View style={styles.detailsTopSpacer} />
+      </View>
+      <View style={styles.storeInfoCard}>
+        <RText style={styles.storeRatingTitle}>خان — تسوّق محلي بكل سهولة</RText>
+        <RText style={styles.detailsDescription}>
+          خان منصة تسوق تجمع متاجرك المحلية المفضلة في مكان واحد: آلاف المنتجات، عروض وكوبونات يومية، وريلز تُريك المنتج قبل الشراء. اطلب من متاجرك القريبة وتابع طلبك أولًا بأول.
+        </RText>
+        <View style={[styles.storeInfoGrid, { marginTop: 14 }]}>
+          <View style={styles.storeInfoCell}>
+            <AppIcon icon={Icons.Package} size={17} color={palette.green} />
+            <RText style={styles.storeInfoValue}>منتجات</RText>
+            <RText style={styles.storeInfoLabel}>من متاجر موثوقة</RText>
+          </View>
+          <View style={styles.storeInfoCell}>
+            <AppIcon icon={Icons.Truck} size={17} color={palette.green} />
+            <RText style={styles.storeInfoValue}>توصيل</RText>
+            <RText style={styles.storeInfoLabel}>حتى باب منزلك</RText>
+          </View>
+          <View style={styles.storeInfoCell}>
+            <AppIcon icon={Icons.Ticket || Icons.Tag} size={17} color={palette.green} />
+            <RText style={styles.storeInfoValue}>كوبونات</RText>
+            <RText style={styles.storeInfoLabel}>عروض يومية</RText>
+          </View>
+        </View>
+      </View>
     </ScreenScroll>
   );
 }

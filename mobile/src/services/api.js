@@ -210,11 +210,19 @@ export const catalogApi = {
   categories: () => apiFetch('/categories'),
   products: (query = {}) => apiFetch(`/products${makeQuery(query)}`),
   product: (id) => apiFetch(`/products/${id}`),
+  stores: () => apiFetch('/stores'),
   store: (id) => apiFetch(`/stores/${id}`),
   storeProducts: (id, query = {}) => apiFetch(`/stores/${id}/products${makeQuery(query)}`),
   search: (query = {}) => apiFetch(`/search${makeQuery(query)}`),
   reels: (query = {}) => apiFetch(`/reels${makeQuery(query)}`),
   coupons: (query = {}) => apiFetch(`/coupons${makeQuery(query)}`),
+};
+
+export const savedStoresApi = {
+  list: () => apiFetch('/saved-stores', { authArea: 'customer' }),
+  add: (storeId) => post(`/saved-stores/${storeId}`, null, { authArea: 'customer' }),
+  remove: (storeId) => del(`/saved-stores/${storeId}`, { authArea: 'customer' }),
+  status: (storeId) => apiFetch(`/saved-stores/${storeId}/status`, { authArea: 'customer' }),
 };
 
 export const cartApi = {
@@ -232,6 +240,20 @@ export const ordersApi = {
   get: (id) => apiFetch(`/orders/${id}`, { authArea: 'customer' }),
   confirmDelivery: (id) =>
     post(`/orders/${id}/confirm-delivery`, {}, { authArea: 'customer' }),
+};
+
+export const addressesApi = {
+  list: () => apiFetch('/addresses', { authArea: 'customer' }),
+  get: (id) => apiFetch(`/addresses/${id}`, { authArea: 'customer' }),
+  create: (payload) => post('/addresses', payload, { authArea: 'customer' }),
+  update: (id, payload) => patch(`/addresses/${id}`, payload, { authArea: 'customer' }),
+  remove: (id) => del(`/addresses/${id}`, { authArea: 'customer' }),
+  setDefault: (id) => patch(`/addresses/${id}/default`, { isDefault: true }, { authArea: 'customer' }),
+};
+
+export const couponsApi = {
+  mine: () => apiFetch('/coupons/mine', { authArea: 'customer' }),
+  validate: (payload) => post('/coupons/validate', payload, { authArea: 'customer' }),
 };
 
 export const favoritesApi = {
@@ -253,8 +275,10 @@ export const notificationsApi = {
 
 export const reviewsApi = {
   create: (payload) => post('/reviews', payload, { authArea: 'customer' }),
-  store: (storeId) => apiFetch(`/reviews/stores/${storeId}`),
-  product: (productId) => apiFetch(`/reviews/products/${productId}`),
+  store: (storeId, sort) => apiFetch(`/reviews/stores/${storeId}${makeQuery({ sort })}`),
+  storeEligibility: (storeId) => apiFetch(`/reviews/stores/${storeId}/eligibility`, { authArea: 'customer' }),
+  product: (productId, sort) => apiFetch(`/reviews/products/${productId}${makeQuery({ sort })}`),
+  productEligibility: (productId) => apiFetch(`/reviews/products/${productId}/eligibility`, { authArea: 'customer' }),
 };
 
 export const paymentsApi = {

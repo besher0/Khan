@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, ScrollView, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { authApi, cartApi, catalogApi, favoritesApi, notificationsApi, ordersApi, reviewsApi } from '../../services/api';
+import { addressesApi, authApi, cartApi, catalogApi, couponsApi, favoritesApi, notificationsApi, ordersApi, reviewsApi, savedStoresApi } from '../../services/api';
 import { styles } from './theme/styles';
 import {
   AppIcon,
@@ -12,6 +12,7 @@ import {
   normalizeCoupon,
   normalizeProduct,
   normalizeReel,
+  normalizeStore,
   palette,
 } from './shared/marketplaceShared';
 import * as Icons from '../../../icons';
@@ -19,6 +20,7 @@ import onboardingDeliveryImage from '../../../assets/onboarding-delivery.png';
 import onboardingReelsImage from '../../../assets/onboarding-reels.png';
 import onboardingShoppingImage from '../../../assets/onboarding-shopping.png';
 import {
+  AboutScreen,
   AuthScreen,
   CartScreen,
   CheckoutScreen,
@@ -35,8 +37,20 @@ import {
   ProductDetailsScreen,
   ReelsScreen,
   SearchScreen,
-  StoreScreen,
+  SupportScreen,
 } from './screens/CustomerScreens';
+import {
+  AddressFormScreen,
+  AddressesScreen,
+  CouponsScreen,
+} from './screens/AddressesCouponsScreens';
+import {
+  AllStoresScreen,
+  RateStoreScreen,
+  SavedStoresScreen,
+  StoreDetailsScreen,
+  StoreReviewsScreen,
+} from './screens/StoreScreen';
 
 const bottomTabs = [
   { key: 'account', label: 'حسابي', icon: Icons.User, screen: 'account' },
@@ -154,9 +168,26 @@ function canSyncProduct(product) {
 }
 
 const FAVORITES_KEY = 'khan.customer.favorites';
+const SAVED_STORES_KEY = 'khan.customer.savedStores';
 const ONBOARDING_KEY = 'khan.customer.onboarding.done';
 const ONBOARDING_BRIGHT_GREEN = '#209B84';
 const swipeScreens = ['account', 'cart', 'reels', 'search', 'home'];
+
+function readLocalSavedStores() {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(SAVED_STORES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalSavedStores(storeIds) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SAVED_STORES_KEY, JSON.stringify(storeIds));
+}
 
 const onboardingSlides = [
   {
@@ -330,7 +361,26 @@ export default function PhoneExperience() {
   const [selectedReel, setSelectedReel] = useState(null);
   const [cart, setCart] = useState([]);
   const [cartCouponCode, setCartCouponCode] = useState('');
+  const [cartCoupon, setCartCoupon] = useState(null);
+  const [cartCouponDiscount, setCartCouponDiscount] = useState(0);
+  const [cartCouponFeedback, setCartCouponFeedback] = useState('');
+  const [couponValidating, setCouponValidating] = useState(false);
+  const [addresses, setAddresses] = useState([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
+  const [addressesError, setAddressesError] = useState('');
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [addressFormError, setAddressFormError] = useState('');
+  const [checkoutAddressId, setCheckoutAddressId] = useState(null);
   const [favorites, setFavorites] = useState(() => (authApi.getSession('customer') ? readLocalFavorites() : []));
+  const [savedStoreIds, setSavedStoreIds] = useState(() => (authApi.getSession('customer') ? readLocalSavedStores() : []));
+  const [savedStores, setSavedStores] = useState([]);
+  const [savedStoresLoading, setSavedStoresLoading] = useState(false);
+  const [savedStoresError, setSavedStoresError] = useState('');
+  const [allStores, setAllStores] = useState([]);
+  const [allStoresLoading, setAllStoresLoading] = useState(false);
+  const [allStoresError, setAllStoresError] = useState('');
+  const [selectedStore, setSelectedStore] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState('');
   const [session, setSession] = useState(() => authApi.getSession('customer'));
@@ -351,10 +401,16 @@ export default function PhoneExperience() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [swipeStart, setSwipeStart] = useState(null);
 
-  const navigateTo = (nextScreen) => {
+  const navigateTo = (nextScreen, options = {}) => {
     if (!nextScreen || nextScreen === screen) return;
     setNavigationHistory((current) => [...current, screen]);
     setScreen(nextScreen);
+    if (options.prefillCoupon) {
+      setCartCouponCode(options.prefillCoupon.code || '');
+      setCartCoupon(options.prefillCoupon);
+      setCartCouponDiscount(0);
+      setCartCouponFeedback('');
+    }
   };
 
   const goBack = () => {
@@ -407,6 +463,44 @@ export default function PhoneExperience() {
     }
   };
 
+  const loadSavedStores = async () => {
+    if (!authApi.getSession('customer')) {
+      setSavedStoreIds([]);
+      setSavedStores([]);
+      return;
+    }
+
+    setSavedStoresLoading(true);
+    setSavedStoresError('');
+    try {
+      const remoteSavedStores = await savedStoresApi.list();
+      const stores = (remoteSavedStores || [])
+        .map((item) => normalizeStore(item.store || item))
+        .filter(Boolean);
+      const remoteIds = stores.map((store) => store.id);
+      setSavedStores(stores);
+      setSavedStoreIds(remoteIds);
+      writeLocalSavedStores(remoteIds);
+    } catch (error) {
+      setSavedStoresError(error.message);
+    } finally {
+      setSavedStoresLoading(false);
+    }
+  };
+
+  const loadAllStores = async () => {
+    setAllStoresLoading(true);
+    setAllStoresError('');
+    try {
+      const response = await catalogApi.stores();
+      setAllStores((response || []).map(normalizeStore).filter(Boolean));
+    } catch (error) {
+      setAllStoresError(error.message);
+    } finally {
+      setAllStoresLoading(false);
+    }
+  };
+
   const loadNotifications = async () => {
     if (!authApi.getSession('customer')) {
       setNotifications([]);
@@ -421,6 +515,24 @@ export default function PhoneExperience() {
     }
   };
 
+  const loadAddresses = async () => {
+    if (!authApi.getSession('customer')) {
+      setAddresses([]);
+      return;
+    }
+
+    setAddressesLoading(true);
+    setAddressesError('');
+    try {
+      const remoteAddresses = await addressesApi.list();
+      setAddresses((remoteAddresses || []).map(normalizeAddress).filter(Boolean));
+    } catch (error) {
+      setAddressesError(error.message);
+    } finally {
+      setAddressesLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadCatalog();
   }, []);
@@ -429,6 +541,8 @@ export default function PhoneExperience() {
     loadCart();
     loadFavorites();
     loadNotifications();
+    loadSavedStores();
+    loadAddresses();
   }, [session]);
 
   useEffect(() => {
@@ -548,6 +662,76 @@ export default function PhoneExperience() {
     navigateTo('product');
   };
 
+  const openAllStores = () => {
+    navigateTo('stores');
+    if (!allStores.length) loadAllStores();
+  };
+
+  const openStore = (store) => {
+    const storeId = typeof store === 'string' ? store : store?.id;
+    if (!storeId) return;
+    setSelectedStore((current) => (current?.id === storeId ? current : { id: storeId }));
+    navigateTo('storeDetails');
+  };
+
+  const openStoreReviews = (store) => {
+    const storeId = typeof store === 'string' ? store : store?.id;
+    if (!storeId) return;
+    if (selectedStore?.id !== storeId) {
+      setSelectedStore({ id: storeId });
+    }
+    navigateTo('storeReviews');
+  };
+
+  const openRateStore = (store) => {
+    const storeId = typeof store === 'string' ? store : store?.id;
+    if (!storeId) return;
+
+    if (!session) {
+      setAuthInitialMode('login');
+      setToast('سجل دخولك لتقييم المتجر');
+      navigateTo('auth');
+      return;
+    }
+
+    if (selectedStore?.id !== storeId) {
+      setSelectedStore({ id: storeId });
+    }
+    navigateTo('rateStore');
+  };
+
+  const toggleStoreSave = async (storeId) => {
+    if (!session) {
+      setAuthInitialMode('login');
+      setToast('سجل دخولك لحفظ المتجر');
+      navigateTo('auth');
+      return;
+    }
+    if (!storeId) return;
+
+    const wasSaved = savedStoreIds.includes(storeId);
+    const nextIds = wasSaved
+      ? savedStoreIds.filter((id) => id !== storeId)
+      : [...savedStoreIds, storeId];
+
+    setSavedStoreIds(nextIds);
+    writeLocalSavedStores(nextIds);
+    setToast(wasSaved ? 'تمت إزالة المتجر من المحفوظة' : 'تم حفظ المتجر');
+
+    try {
+      if (wasSaved) {
+        await savedStoresApi.remove(storeId);
+        setSavedStores((current) => current.filter((store) => store.id !== storeId));
+      } else {
+        await savedStoresApi.add(storeId);
+        loadSavedStores();
+      }
+    } catch (error) {
+      setToast(error.message);
+      loadSavedStores();
+    }
+  };
+
   const openReel = (reel) => {
     setSelectedReel(reel);
     navigateTo('reels');
@@ -609,16 +793,75 @@ export default function PhoneExperience() {
     }
   };
 
-  const applyCartCoupon = (code) => {
-    if (!code) {
-      setCartCouponCode('');
-      setToast('الكوبون غير صالح لهذه السلة');
+  const cartStoreId = cart[0]?.product?.storeId || cart[0]?.product?.raw?.storeId || null;
+  const cartSubtotal = cart.reduce((total, item) => total + (item.product.priceValue || 0) * item.quantity, 0);
+
+  const clearCartCoupon = () => {
+    setCartCouponCode('');
+    setCartCoupon(null);
+    setCartCouponDiscount(0);
+    setCartCouponFeedback('');
+  };
+
+  // Backend-authoritative validation for every coupon apply attempt.
+  const applyCartCoupon = async (code, source = 'code') => {
+    const normalized = (code || '').trim().toUpperCase();
+
+    if (!normalized) {
+      clearCartCoupon();
       return;
     }
 
-    setCartCouponCode(code);
-    setToast('تم تطبيق الكوبون');
+    if (couponValidating) return;
+    setCouponValidating(true);
+    setCartCouponFeedback('');
+
+    try {
+      const result = await couponsApi.validate({
+        code: normalized,
+        storeId: cartStoreId || undefined,
+        subtotal: cartSubtotal,
+      });
+
+      if (!result?.valid) {
+        setCartCouponCode(source === 'code' ? normalized : '');
+        setCartCoupon(null);
+        setCartCouponDiscount(0);
+        setCartCouponFeedback(result?.message || 'الكوبون غير صالح');
+        return;
+      }
+
+      setCartCouponCode(result.code || normalized);
+      setCartCoupon({ code: result.code || normalized });
+      setCartCouponDiscount(Number(result.discount || 0));
+      setCartCouponFeedback('');
+      setToast('تم تطبيق الكوبون');
+    } catch (error) {
+      setCartCouponCode(source === 'code' ? normalized : '');
+      setCartCoupon(null);
+      setCartCouponDiscount(0);
+      setCartCouponFeedback(error.message || 'الكوبون غير صالح');
+    } finally {
+      setCouponValidating(false);
+    }
   };
+
+  // Revalidate the applied coupon whenever cart contents change so an
+  // invalid discount never stays applied (min order, store change, ...).
+  const revalidateRef = useRef(applyCartCoupon);
+  revalidateRef.current = applyCartCoupon;
+  const lastRevalidationRef = useRef('');
+
+  useEffect(() => {
+    if (!cartCouponCode) {
+      lastRevalidationRef.current = '';
+      return;
+    }
+    const signature = `${cartCouponCode}|${cartSubtotal}|${cartStoreId || ''}`;
+    if (signature === lastRevalidationRef.current) return;
+    lastRevalidationRef.current = signature;
+    revalidateRef.current(cartCouponCode, 'code');
+  }, [cartCouponCode, cartSubtotal, cartStoreId]);
 
   const handleLogin = async (payload) => {
     setAuthLoading(true);
@@ -725,7 +968,80 @@ export default function PhoneExperience() {
     setCart([]);
     setFavorites([]);
     writeLocalFavorites([]);
+    setAddresses([]);
+    clearCartCoupon();
     setToast('تم تسجيل الخروج');
+  };
+
+  const openAddresses = () => {
+    navigateTo('addresses');
+    loadAddresses();
+  };
+
+  const openAddressForm = (address = null) => {
+    setEditingAddress(address);
+    setAddressFormError('');
+    navigateTo('addressForm');
+  };
+
+  const saveAddress = async (payload) => {
+    if (addressSaving) return;
+    setAddressSaving(true);
+    setAddressFormError('');
+    try {
+      if (editingAddress?.id) {
+        await addressesApi.update(editingAddress.id, payload);
+        setToast('تم تحديث العنوان');
+      } else {
+        await addressesApi.create(payload);
+        setToast('تم إضافة العنوان');
+      }
+      await loadAddresses();
+      goBack();
+    } catch (error) {
+      setAddressFormError(error.message || 'تعذر حفظ العنوان');
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  const setAddressDefault = async (address) => {
+    if (!address?.id || address.isDefault) return;
+    try {
+      await addressesApi.setDefault(address.id);
+      setAddresses((current) =>
+        current.map((item) => ({ ...item, isDefault: item.id === address.id })),
+      );
+      setToast('تم تعيين العنوان الافتراضي');
+    } catch (error) {
+      setToast(error.message);
+      loadAddresses();
+    }
+  };
+
+  const deleteAddress = async (address) => {
+    if (!address?.id) return;
+    try {
+      await addressesApi.remove(address.id);
+      setAddresses((current) => current.filter((item) => item.id !== address.id));
+      setToast('تم حذف العنوان');
+      if (checkoutAddressId === address.id) setCheckoutAddressId(null);
+    } catch (error) {
+      setToast(error.message);
+      loadAddresses();
+    }
+  };
+
+  const openMyCoupons = () => {
+    navigateTo('coupons');
+  };
+
+  const useCouponInCart = (coupon) => {
+    if (!coupon || coupon.state !== 'active') {
+      setToast('لا يمكن استخدام هذا الكوبون');
+      return;
+    }
+    navigateTo('cart', { prefillCoupon: coupon });
   };
 
   const handleUpdateProfile = async (payload) => {
@@ -760,6 +1076,7 @@ export default function PhoneExperience() {
       const order = await ordersApi.checkout(payload);
       setLastOrder(order);
       setCart([]);
+      clearCartCoupon();
       navigateTo('success');
     } catch (error) {
       setToast(error.message);
@@ -864,8 +1181,26 @@ export default function PhoneExperience() {
     setReviewSubmitting(true);
     try {
       await reviewsApi.create(payload);
-      setToast('شكرًا لك! تم إرسال تقييمك');
-      navigateTo('home');
+      setToast('شكرًا لك! تم إرسال تقييمك وسيظهر بعد موافقة الإدارة');
+      if (payload.productId) {
+        navigateTo('product');
+      } else {
+        navigateTo('storeReviews');
+      }
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const submitStoreReview = async (payload) => {
+    if (!payload?.orderId || reviewSubmitting || !selectedStore?.id) return;
+    setReviewSubmitting(true);
+    try {
+      await reviewsApi.create({ ...payload, storeId: selectedStore.id });
+      setToast('شكرًا لك! تم إرسال تقييمك وسيظهر بعد موافقة الإدارة');
+      navigateTo('storeReviews');
     } catch (error) {
       setToast(error.message);
     } finally {
@@ -908,6 +1243,7 @@ export default function PhoneExperience() {
         onShowAll={(type) => openCollection(type, 'home')}
         onCopyCoupon={copyCoupon}
         notificationCount={notifications.filter((item) => !item.readAt).length}
+        onOpenStores={() => openAllStores()}
       />
     ),
     favorites: (
@@ -945,16 +1281,99 @@ export default function PhoneExperience() {
         onOpenFavorites={() => navigateTo('favorites')}
         onOpenNotifications={() => navigateTo('notifications')}
         onOpenOrders={openOrders}
-        onOpenCoupons={() => openCollection('coupons', 'account')}
+        onOpenCoupons={openMyCoupons}
+        defaultAddress={addresses.find((address) => address.isDefault) || addresses[0] || null}
+        onOpenAddresses={() => {
+          if (session) {
+            openAddresses();
+          } else {
+            setToast('سجل دخولك لإدارة عناوينك');
+          }
+        }}
         onShowAll={(type) => openCollection(type, 'account')}
-        onOpenSavedStores={() => setToast('المتاجر المحفوظة قريبًا')}
-        onOpenSupport={() => setToast('المساعدة والدعم قريبًا')}
-        onOpenAbout={() => setToast('خان — تسوّق محلي بكل سهولة')}
+        onOpenSavedStores={() => {
+          if (session) {
+            navigateTo('savedStores');
+            loadSavedStores();
+          } else {
+            setToast('سجل دخولك لعرض متاجرك المحفوظة');
+          }
+        }}
+        onOpenSupport={() => navigateTo('support')}
+        onOpenAbout={() => navigateTo('about')}
         onEditProfile={() => {
           setProfileError('');
           navigateTo('editProfile');
         }}
         onLogout={handleLogout}
+      />
+    ),
+    support: <SupportScreen onBack={goBack} />,
+    about: <AboutScreen onBack={goBack} />,
+    stores: (
+      <AllStoresScreen
+        catalog={catalog}
+        stores={allStores}
+        loading={allStoresLoading}
+        error={allStoresError}
+        onRetry={loadAllStores}
+        onBack={goBack}
+        onOpenStore={openStore}
+        onCopyCoupon={copyCoupon}
+        session={session}
+        onOpenSavedStores={() => {
+          navigateTo('savedStores');
+          loadSavedStores();
+        }}
+      />
+    ),
+    storeDetails: (
+      <StoreDetailsScreen
+        storeId={selectedStore?.id}
+        catalog={catalog}
+        savedStoreIds={savedStoreIds}
+        onToggleSave={toggleStoreSave}
+        onOpenProduct={openProduct}
+        onAddToCart={addToCart}
+        onToggleFavorite={toggleFavorite}
+        favorites={favorites}
+        onShowAll={(type) => openCollection(type, 'storeDetails')}
+        onOpenReviews={() => navigateTo('storeReviews')}
+        onBack={goBack}
+        onCopyCoupon={copyCoupon}
+      />
+    ),
+    storeReviews: (
+      <StoreReviewsScreen
+        storeId={selectedStore?.id}
+        store={selectedStore}
+        onSubmitRate={() => openRateStore(selectedStore?.id)}
+        onBack={goBack}
+      />
+    ),
+    rateStore: (
+      <RateStoreScreen
+        store={selectedStore}
+        submitting={reviewSubmitting}
+        onSubmit={submitStoreReview}
+        onBack={goBack}
+        onLogin={() => {
+          setAuthInitialMode('login');
+          navigateTo('auth');
+        }}
+        session={session}
+      />
+    ),
+    savedStores: (
+      <SavedStoresScreen
+        savedStores={savedStores}
+        loading={savedStoresLoading}
+        error={savedStoresError}
+        onRetry={loadSavedStores}
+        onOpenStore={openStore}
+        onRemove={toggleStoreSave}
+        onBack={goBack}
+        onOpenAllStores={() => openAllStores()}
       />
     ),
     editProfile: (
@@ -972,14 +1391,7 @@ export default function PhoneExperience() {
         catalog={catalog}
         searchResults={searchResults}
         onSearch={handleSearch}
-      />
-    ),
-    store: (
-      <StoreScreen
-        {...sharedProductProps}
-        catalog={catalog}
-        onShowAll={(type) => openCollection(type, 'store')}
-        onSubmitReview={() => setToast('يحتاج إرسال التقييم إلى طلب سابق من نفس المتجر')}
+        onOpenStore={openStore}
       />
     ),
     collection: (
@@ -1012,6 +1424,40 @@ export default function PhoneExperience() {
         onLogout={handleLogout}
       />
     ),
+    addresses: (
+      <AddressesScreen
+        addresses={addresses}
+        loading={addressesLoading}
+        error={addressesError}
+        onRetry={loadAddresses}
+        onBack={goBack}
+        onAdd={() => openAddressForm(null)}
+        onEdit={(address) => openAddressForm(address)}
+        onSetDefault={setAddressDefault}
+        onDelete={deleteAddress}
+      />
+    ),
+    addressForm: (
+      <AddressFormScreen
+        editingAddress={editingAddress}
+        saving={addressSaving}
+        error={addressFormError}
+        onSave={saveAddress}
+        onBack={goBack}
+      />
+    ),
+    coupons: (
+      <CouponsScreen
+        coupons={catalog.coupons || []}
+        loading={catalogLoading}
+        error={catalogError}
+        onRetry={loadCatalog}
+        onBack={goBack}
+        onCopyCoupon={(coupon) => copyCoupon(coupon.code || coupon)}
+        onGetCoupon={() => openCollection('coupons', 'coupons')}
+        onUseInCart={useCouponInCart}
+      />
+    ),
     cart: (
       <CartScreen
         cart={cart}
@@ -1022,7 +1468,11 @@ export default function PhoneExperience() {
         favorites={favorites}
         coupons={catalog.coupons || []}
         couponCode={cartCouponCode}
+        appliedCoupon={cartCoupon}
+        appliedCouponDiscount={cartCouponDiscount}
+        couponFeedback={cartCouponFeedback}
         onApplyCoupon={applyCartCoupon}
+        onOpenMyCoupons={openMyCoupons}
         onUpdateQuantity={updateQuantity}
         onRemove={removeFromCart}
         onContinueShopping={() => navigateTo('home')}
@@ -1035,7 +1485,11 @@ export default function PhoneExperience() {
         onToggleFavorite={toggleFavorite}
         onShowAll={(type) => openCollection(type, 'cart')}
         onRetry={loadCatalog}
-        onCheckout={() => navigateTo('checkout')}
+        onCheckout={() => {
+          const defaultAddress = addresses.find((address) => address.isDefault) || addresses[0] || null;
+          setCheckoutAddressId(defaultAddress?.id || null);
+          navigateTo('checkout');
+        }}
       />
     ),
     checkout: (
@@ -1043,6 +1497,10 @@ export default function PhoneExperience() {
         cart={cart}
         couponCode={cartCouponCode}
         coupons={catalog.coupons || []}
+        addresses={addresses}
+        selectedAddressId={checkoutAddressId}
+        onSelectAddress={(address) => setCheckoutAddressId(address.id)}
+        onAddNewAddress={() => openAddressForm(null)}
         onBack={goBack}
         onComplete={completeCheckout}
         submitting={checkoutLoading}
@@ -1084,6 +1542,10 @@ export default function PhoneExperience() {
         onToggleFavorite={toggleFavorite}
         isFavorite={favorites.includes(selectedProduct?.id || selectedProduct?.title)}
         onGoToCart={() => navigateTo('cart')}
+        onOpenStore={openStore}
+        onOpenReviews={() => openStoreReviews(selectedProduct?.storeId || selectedProduct?.raw?.storeId)}
+        onRateProduct={handleSubmitReview}
+        submittingReview={reviewSubmitting}
       />
     ),
   }[screen];

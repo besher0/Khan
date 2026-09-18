@@ -14,7 +14,11 @@ import {
   WalletTransactionStatus,
   WalletTransactionType,
 } from '@prisma/client';
-import { calculateCouponDiscount } from '../common/utils/coupons';
+import {
+  normalizeCouponCode,
+  pickCouponForCart,
+  validateCouponForOrder,
+} from '../common/utils/coupons';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckoutAddressDto, CheckoutDto } from './dto';
@@ -55,12 +59,7 @@ export class OrdersService {
       (total, item) => total + item.product.price * item.quantity,
       0,
     );
-    const coupon = dto.couponCode
-      ? await this.findValidCoupon(cart.storeId, dto.couponCode, subtotal)
-      : null;
-    const discountTotal = calculateCouponDiscount(coupon, subtotal);
     const deliveryFee = 0;
-    const total = subtotal + deliveryFee - discountTotal;
     const paymentStatus =
       dto.paymentMethod === PaymentMethod.SHAM_CASH ? PaymentStatus.PENDING : PaymentStatus.UNPAID;
 
@@ -84,12 +83,45 @@ export class OrdersService {
         }
       }
 
-      if (coupon) {
-        await tx.coupon.update({
-          where: { id: coupon.id },
+      // Final coupon validation INSIDE the transaction: reload, verify
+      // scope/status/dates/usage-limit/min-order against committed data, then
+      // consume one usage atomically. Two concurrent checkouts can never both
+      // take the last remaining usage: the guarded updateMany only matches
+      // while usedCount < usageLimit, and the loser gets count === 0.
+      let discountTotal = 0;
+      if (dto.couponCode) {
+        const code = normalizeCouponCode(dto.couponCode);
+        const candidates = await tx.coupon.findMany({ where: { code } });
+        const coupon = pickCouponForCart(candidates, cart.storeId);
+
+        const check = validateCouponForOrder(coupon, { storeId: cart.storeId, subtotal });
+        if (!check.ok) {
+          throw new BadRequestException(check.message);
+        }
+
+        const now = new Date();
+        const consumed = await tx.coupon.updateMany({
+          where: {
+            id: check.coupon.id,
+            status: CouponStatus.ACTIVE,
+            OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+            AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
+            ...(check.coupon.usageLimit != null
+              ? { usedCount: { lt: check.coupon.usageLimit } }
+              : {}),
+          },
           data: { usedCount: { increment: 1 } },
         });
+
+        if (consumed.count !== 1) {
+          // Lost the race for the last usage (or status flipped concurrently).
+          throw new BadRequestException('تم استخدام هذا الكوبون');
+        }
+
+        discountTotal = check.discount;
       }
+
+      const total = subtotal + deliveryFee - discountTotal;
 
       const created = await tx.order.create({
         data: {
@@ -106,8 +138,19 @@ export class OrdersService {
           total,
           customerName: `${user.firstName} ${user.lastName}`,
           customerPhone: address.phone,
-          city: address.city,
-          addressLine: [address.line1, address.line2].filter(Boolean).join(', '),
+          city: address.governorate || address.city,
+          // Full snapshot of the delivery info at order time: historical orders
+          // must not depend on the mutable Address row after edits/deletes.
+          addressLine: [
+            address.line1 || [address.area, address.street].filter(Boolean).join(' - '),
+            address.building,
+            address.floor ? `الطابق ${address.floor}` : '',
+            address.additionalInfo,
+            address.line2,
+          ]
+            .map((part) => (part || '').trim())
+            .filter(Boolean)
+            .join(', '),
           notes: dto.notes,
           items: {
             create: cart.items.map((item) => ({
@@ -254,33 +297,16 @@ export class OrdersService {
         line1: address.line1,
         line2: address.line2,
         phone: address.phone,
+        governorate: address.governorate,
+        area: address.area,
+        street: address.street,
+        building: address.building,
+        floor: address.floor,
+        additionalInfo: address.additionalInfo,
+        latitude: address.latitude,
+        longitude: address.longitude,
       },
     });
-  }
-
-  private async findValidCoupon(storeId: string, code: string, subtotal: number) {
-    const now = new Date();
-    const coupon = await this.prisma.coupon.findFirst({
-      where: {
-        storeId,
-        code: code.trim().toUpperCase(),
-        status: CouponStatus.ACTIVE,
-        OR: [{ startsAt: null }, { startsAt: { lte: now } }],
-        AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
-      },
-    });
-
-    if (!coupon) {
-      throw new BadRequestException('Coupon is invalid or expired');
-    }
-    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-      throw new BadRequestException('Coupon usage limit reached');
-    }
-    if (coupon.minOrderAmount && subtotal < coupon.minOrderAmount) {
-      throw new BadRequestException('Order does not meet coupon minimum amount');
-    }
-
-    return coupon;
   }
 
   private makeOrderNumber() {

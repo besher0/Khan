@@ -123,6 +123,7 @@ export function HomeScreen({
   onCopyCoupon,
   favorites,
   notificationCount,
+  onOpenStores,
 }) {
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState(ALL_TAB);
@@ -160,6 +161,12 @@ export function HomeScreen({
       <DataNotice loading={loading} error={error} onRetry={onRetry} />
       <HomePromo banners={catalog?.banners || []} onOpenProduct={onOpenProduct} />
       <CategoryStrip items={categories} />
+      {onOpenStores ? (
+        <TouchableOpacity style={styles.storeRatingButton} onPress={onOpenStores} activeOpacity={0.85}>
+          <AppIcon icon={Icons.Store || Icons.ShoppingBag} size={15} color={palette.white} />
+          <RText style={styles.storeRatingButtonText}>تصفح كل المتاجر</RText>
+        </TouchableOpacity>
+      ) : null}
       {reels.length ? (
         <>
           <SectionTitle title="ريلز خان" icon={Icons.Video} onAction={() => onShowAll?.('reels')} />

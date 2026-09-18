@@ -18,6 +18,7 @@ import { safeUserSelect } from '../common/prisma/safe-user-select';
 import { normalizeSyrianPhone } from '../auth/phone';
 import { slugify } from '../common/utils/slugify';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SavedStoresService } from '../saved-stores/saved-stores.service';
 import {
   CreateAdminStoreDto,
   CreateStorePackageDto,
@@ -25,6 +26,7 @@ import {
   CreateCategoryDto,
   CreateDeliveryEventDto,
   CreateHomeBannerDto,
+  CreatePlatformCouponDto,
   UpdateOrderStatusDto,
   UpdateStorePackageDto,
   UpdateCategoryDto,
@@ -38,6 +40,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly savedStores: SavedStoresService,
   ) {}
 
   stores() {
@@ -225,6 +228,49 @@ export class AdminService {
         slug: `${slugify(dto.name) || 'category'}-${Date.now().toString(36)}`,
         imageUrl: dto.imageUrl?.trim() || undefined,
       },
+    });
+  }
+
+  /**
+   * Creates a platform/app coupon (storeId null): valid in any approved
+   * store. Codes stay unique among platform coupons via a partial index.
+   */
+  async createPlatformCoupon(dto: CreatePlatformCouponDto) {
+    const code = dto.code.trim().toUpperCase();
+    if (!code) throw new BadRequestException('Coupon code is required');
+
+    const existing = await this.prisma.coupon.findFirst({
+      where: { code, storeId: null },
+    });
+    if (existing) {
+      throw new BadRequestException('Platform coupon code already exists');
+    }
+
+    if (dto.startsAt && dto.endsAt && new Date(dto.startsAt) >= new Date(dto.endsAt)) {
+      throw new BadRequestException('Coupon start date must be before end date');
+    }
+
+    return this.prisma.coupon.create({
+      data: {
+        storeId: null,
+        code,
+        type: dto.type,
+        value: dto.value,
+        minOrderAmount: dto.minOrderAmount,
+        maxDiscountAmount: dto.maxDiscountAmount,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : undefined,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : undefined,
+        usageLimit: dto.usageLimit,
+      },
+      include: { store: true },
+    });
+  }
+
+  platformCoupons() {
+    return this.prisma.coupon.findMany({
+      where: { storeId: null },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
     });
   }
 
@@ -536,9 +582,16 @@ export class AdminService {
   }
 
   reviewStatus(id: string, status: keyof typeof ReviewStatus) {
-    return this.prisma.review.update({
-      where: { id },
-      data: { status: ReviewStatus[status] },
+    return this.prisma.$transaction(async (tx) => {
+      const review = await tx.review.update({
+        where: { id },
+        data: { status: ReviewStatus[status] },
+      });
+
+      // Keep the store rating aggregates in sync with approved reviews only.
+      await this.savedStores.recomputeStoreRating(review.storeId);
+
+      return review;
     });
   }
 

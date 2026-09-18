@@ -19,6 +19,7 @@
     "expo": "~54.0.35",
     "expo-asset": "^57.0.17",
     "expo-font": "^57.0.4",
+    "expo-location": "~19.0.8",
     "lucide-react": "^0.577.0",
     "lucide-react-native": "^0.577.0",
     "nativewind": "^4.1.23",

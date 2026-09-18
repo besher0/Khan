@@ -144,9 +144,10 @@ model User {
   orders         Order[]
   reviews        Review[]
   favorites      Favorite[]
+  savedStores    SavedStore[]
   notifications  Notification[]
   deviceTokens   NotificationDeviceToken[]
-  deliveryEvents DeliveryEvent[] @relation("DeliveryEventActor")
+  deliveryEvents DeliveryEvent[]           @relation("DeliveryEventActor")
 }
 
 model PhoneVerification {
@@ -191,6 +192,7 @@ model Store {
   reviews            Review[]
   walletTransactions WalletTransaction[]
   subscriptions      StoreSubscription[]
+  savedByUsers       SavedStore[]
 
   @@index([ownerId])
   @@index([status])
@@ -260,14 +262,14 @@ model Product {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
-  store      Store          @relation(fields: [storeId], references: [id])
-  category   Category?      @relation(fields: [categoryId], references: [id])
-  images     ProductImage[]
-  cartItems  CartItem[]
-  orderItems OrderItem[]
-  reels      Reel[]
-  reviews    Review[]
-  favorites  Favorite[]
+  store       Store          @relation(fields: [storeId], references: [id])
+  category    Category?      @relation(fields: [categoryId], references: [id])
+  images      ProductImage[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  reels       Reel[]
+  reviews     Review[]
+  favorites   Favorite[]
   homeBanners HomeBanner[]
 
   @@unique([storeId, slug])
@@ -277,17 +279,17 @@ model Product {
 }
 
 model HomeBanner {
-  id          String           @id @default(uuid())
-  title       String
-  subtitle    String?
-  imageUrl    String
-  ctaLabel    String?
-  targetUrl   String?
-  productId   String?
-  position    Int              @default(0)
-  status      HomeBannerStatus @default(ACTIVE)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id        String           @id @default(uuid())
+  title     String
+  subtitle  String?
+  imageUrl  String
+  ctaLabel  String?
+  targetUrl String?
+  productId String?
+  position  Int              @default(0)
+  status    HomeBannerStatus @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
 
   product Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
@@ -339,16 +341,24 @@ model CartItem {
 }
 
 model Address {
-  id        String   @id @default(uuid())
-  userId    String
-  label     String?
-  city      String
-  line1     String
-  line2     String?
-  phone     String
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String
+  label          String?
+  city           String
+  line1          String
+  line2          String?
+  phone          String
+  governorate    String?
+  area           String?
+  street         String?
+  building       String?
+  floor          String?
+  additionalInfo String?
+  latitude       Float?
+  longitude      Float?
+  isDefault      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders Order[]
@@ -448,7 +458,7 @@ model DeliveryEvent {
 
 model Coupon {
   id                String       @id @default(uuid())
-  storeId           String
+  storeId           String?
   code              String
   type              CouponType
   value             Int
@@ -462,7 +472,8 @@ model Coupon {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  // Null storeId = platform/app coupon (كوبونات التطبيق) valid in any store.
+  store Store? @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@unique([storeId, code])
   @@index([status])
@@ -519,6 +530,18 @@ model Favorite {
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@id([userId, productId])
+}
+
+model SavedStore {
+  userId    String
+  storeId   String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, storeId])
+  @@index([storeId])
 }
 
 model WalletTransaction {
